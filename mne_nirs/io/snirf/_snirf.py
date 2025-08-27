@@ -27,11 +27,13 @@ def write_raw_snirf(raw, fname, add_montage=False):
     and should pass the validation provided by the official
     snirf validator.
 
-    The MNE SNIRF reader requires that the data file contains either
+    The MNE SNIRF reader requires that the data file contains at least
     two wavelengths or both hbo and hbr data. This function can export
-    data with just one wavelength or just hbo or hbr data.
+    data with any number of wavelengths or just hbo or hbr data.
     However, until modifications are made to the SNIRF reader, the
-    exported data will not be readable by the MNE SNIRF reader.
+    exported data with fewer than two wavelengths will not be readable
+    by the MNE SNIRF reader. Older versions of the MNE SNIRF reader
+    only accepted two wavelengths.
 
     Parameters
     ----------
