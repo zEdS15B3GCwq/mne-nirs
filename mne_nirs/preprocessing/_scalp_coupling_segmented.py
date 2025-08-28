@@ -102,12 +102,14 @@ def scalp_coupling_index_windowed(
             for ii in range(0, len(picks), 2):
                 c1 = filtered_data[picks[ii]][start_sample:end_sample]
                 c2 = filtered_data[picks[ii + 1]][start_sample:end_sample]
-                # vvvv changed to match mne-python.mne.preprocessing.nirs.scalp_coupling_index
-                with np.errstate(invalid="ignore"):
+                with np.errstate(
+                    invalid="ignore"
+                ):  # in mne-python.mne.preprocessing.nirs.scalp_coupling_index
                     c = np.corrcoef(c1, c2)[0][1]
-                if not np.isfinite(c):
+                if not np.isfinite(
+                    c
+                ):  # in mne-python.mne.preprocessing.nirs.scalp_coupling_index
                     c = 0
-                # ^^^^
                 scores[ii, window] = c
                 scores[ii + 1, window] = c
 
