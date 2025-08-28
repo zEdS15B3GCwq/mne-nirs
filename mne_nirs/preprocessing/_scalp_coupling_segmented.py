@@ -3,6 +3,7 @@
 # License: BSD (3-clause)
 
 from tokenize import group
+
 import numpy as np
 from mne.filter import filter_data
 from mne.io import BaseRaw
@@ -145,10 +146,7 @@ def scalp_coupling_index_windowed(
                         correlations[n] = c
 
                 # Use minimum correlation as quality metric
-                if correlations.size > 0:
-                    group_sci = correlations.min()
-                else:
-                    group_sci = 0
+                group_sci = correlations.min()
 
                 # Assign the same SCI value to all channels in the group
                 scores[group_picks, window] = group_sci
