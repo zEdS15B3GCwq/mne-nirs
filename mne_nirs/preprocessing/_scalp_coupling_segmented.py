@@ -81,6 +81,10 @@ def scalp_coupling_index_windowed(
     window_samples = int(np.ceil(time_window * raw.info["sfreq"]))
     n_windows = int(np.floor(len(raw) / window_samples))
 
+    # Determine number of wavelengths per source-detector pair
+    ch_wavelengths = [raw.info["chs"][pick]["loc"][9] for pick in picks]
+    n_wavelengths = len(set(ch_wavelengths))
+
     scores = np.zeros((len(picks), n_windows))
     times = []
 
@@ -93,19 +97,64 @@ def scalp_coupling_index_windowed(
         t_stop = raw.times[end_sample]
         times.append((t_start, t_stop))
 
-        for ii in range(0, len(picks), 2):
-            c1 = filtered_data[picks[ii]][start_sample:end_sample]
-            c2 = filtered_data[picks[ii + 1]][start_sample:end_sample]
-            c = np.corrcoef(c1, c2)[0][1]
-            scores[ii, window] = c
-            scores[ii + 1, window] = c
+        if n_wavelengths == 2:
+            # Use pairwise correlation for 2 wavelengths (backward compatibility)
+            for ii in range(0, len(picks), 2):
+                c1 = filtered_data[picks[ii]][start_sample:end_sample]
+                c2 = filtered_data[picks[ii + 1]][start_sample:end_sample]
+                # vvvv changed to match mne-python.mne.preprocessing.nirs.scalp_coupling_index
+                with np.errstate(invalid="ignore"):
+                    c = np.corrcoef(c1, c2)[0][1]
+                if not np.isfinite(c):
+                    c = 0
+                # ^^^^
+                scores[ii, window] = c
+                scores[ii + 1, window] = c
 
-            if (threshold is not None) & (c < threshold):
-                raw.annotations.append(
-                    t_start,
-                    time_window,
-                    "BAD_SCI",
-                    ch_names=[raw.ch_names[ii : ii + 2]],
-                )
+                if (threshold is not None) & (c < threshold):
+                    raw.annotations.append(
+                        t_start,
+                        time_window,
+                        "BAD_SCI",
+                        ch_names=[raw.ch_names[picks[ii] : picks[ii] + 2]],
+                    )
+        else:
+            # For multiple wavelengths: calculate all pairwise correlations and use minimum
+
+            # Group picks by number of wavelengths
+            # Drops last incomplete group, but we're assuming valid data
+            pick_iter = iter(picks)
+            pick_groups = zip(*[pick_iter] * n_wavelengths)
+
+            for group_picks in pick_groups:
+                group_data = filtered_data[group_picks]
+
+                # Calculate pairwise correlations within the group
+                pair_indices = np.triu_indices(len(group_picks), k=1)
+                correlations = np.zeros(pair_indices[0].shape[0])
+
+                for n, (ii, jj) in enumerate(zip(*pair_indices)):
+                    c1 = group_data[ii][start_sample:end_sample]
+                    c2 = group_data[jj][start_sample:end_sample]
+                    with np.errstate(invalid="ignore"):
+                        c = np.corrcoef(c1, c2)[0][1]
+                    if np.isfinite(c):
+                        correlations[n] = c
+
+                # Use minimum correlation as quality metric
+                group_sci = correlations.min()
+
+                # Assign the same SCI value to all channels in the group
+                scores[group_picks, window] = group_sci
+
+                if (threshold is not None) & (group_sci < threshold):
+                    ch_names_in_group = [raw.ch_names[pick] for pick in group_picks]
+                    raw.annotations.append(
+                        t_start,
+                        time_window,
+                        "BAD_SCI",
+                        ch_names=ch_names_in_group,
+                    )
+
     scores = scores[np.argsort(picks)]
     return raw, scores, times
