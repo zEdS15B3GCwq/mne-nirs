@@ -5,7 +5,7 @@
 import numpy as np
 from mne.filter import filter_data
 from mne.io import BaseRaw
-from mne.preprocessing.nirs import _validate_nirs_info
+from mne.preprocessing.nirs import _channel_frequencies, _validate_nirs_info
 from mne.utils import _validate_type, verbose
 from scipy.signal import periodogram
 
@@ -67,6 +67,7 @@ def peak_power(
     _validate_type(raw, BaseRaw, "raw")
 
     picks = _validate_nirs_info(raw.info)
+    n_wavelengths = len(np.unique(_channel_frequencies(raw.info)))
 
     filtered_data = filter_data(
         raw._data,
@@ -94,27 +95,28 @@ def peak_power(
         t_stop = raw.times[end_sample]
         times.append((t_start, t_stop))
 
-        for ii in range(0, len(picks), 2):
-            c1 = filtered_data[picks[ii]][start_sample:end_sample]
-            c2 = filtered_data[picks[ii + 1]][start_sample:end_sample]
-
+        pair_indices = np.triu_indices(n_wavelengths, k=1)
+        for ii in range(0, len(picks), n_wavelengths):
+            group_data = filtered_data[
+                picks[ii : ii + n_wavelengths], start_sample:end_sample
+            ]
             # protect against zero
-            c1 = c1 / (np.std(c1) or 1)
-            c2 = c2 / (np.std(c2) or 1)
+            group_data = np.array([ch / (np.std(ch) or 1) for ch in group_data])
+            peak_powers = []
+            for jj, kk in zip(*pair_indices):
+                c = np.correlate(group_data[jj], group_data[kk], "full")
+                c = c / window_samples
+                [f, pxx] = periodogram(c, fs=raw.info["sfreq"], window="hamming")
+                peak_powers.append(max(pxx))
+            pp = min(peak_powers) if peak_powers else 0.0
+            scores[ii : ii + n_wavelengths, window] = pp
 
-            c = np.correlate(c1, c2, "full")
-            c = c / (window_samples)
-            [f, pxx] = periodogram(c, fs=raw.info["sfreq"], window="hamming")
-
-            scores[ii, window] = max(pxx)
-            scores[ii + 1, window] = max(pxx)
-
-            if (threshold is not None) & (max(pxx) < threshold):
+            if (threshold is not None) & (pp < threshold):
                 raw.annotations.append(
                     t_start,
                     time_window,
                     "BAD_PeakPower",
-                    ch_names=[raw.ch_names[ii : ii + 2]],
+                    ch_names=[raw.ch_names[ii : ii + n_wavelengths]],
                 )
     scores = scores[np.argsort(picks)]
     return raw, scores, times

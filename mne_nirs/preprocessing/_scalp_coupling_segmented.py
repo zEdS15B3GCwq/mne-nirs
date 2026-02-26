@@ -5,7 +5,7 @@
 import numpy as np
 from mne.filter import filter_data
 from mne.io import BaseRaw
-from mne.preprocessing.nirs import _validate_nirs_info
+from mne.preprocessing.nirs import _channel_frequencies, _validate_nirs_info
 from mne.utils import _validate_type, verbose
 
 
@@ -66,6 +66,7 @@ def scalp_coupling_index_windowed(
     _validate_type(raw, BaseRaw, "raw")
 
     picks = _validate_nirs_info(raw.info, fnirs="od", which="Scalp coupling index")
+    n_wavelengths = len(np.unique(_channel_frequencies(raw.info)))
 
     filtered_data = filter_data(
         raw._data,
@@ -93,19 +94,26 @@ def scalp_coupling_index_windowed(
         t_stop = raw.times[end_sample]
         times.append((t_start, t_stop))
 
-        for ii in range(0, len(picks), 2):
-            c1 = filtered_data[picks[ii]][start_sample:end_sample]
-            c2 = filtered_data[picks[ii + 1]][start_sample:end_sample]
-            c = np.corrcoef(c1, c2)[0][1]
-            scores[ii, window] = c
-            scores[ii + 1, window] = c
+        pair_indices = np.triu_indices(n_wavelengths, k=1)
+        for ii in range(0, len(picks), n_wavelengths):
+            group_data = filtered_data[
+                picks[ii : ii + n_wavelengths], start_sample:end_sample
+            ]
+            correlations = []
+            for jj, kk in zip(*pair_indices):
+                with np.errstate(invalid="ignore"):
+                    c = np.corrcoef(group_data[jj], group_data[kk])[0][1]
+                if np.isfinite(c):
+                    correlations.append(c)
+            c = min(correlations) if correlations else 0.0
+            scores[ii : ii + n_wavelengths, window] = c
 
             if (threshold is not None) & (c < threshold):
                 raw.annotations.append(
                     t_start,
                     time_window,
                     "BAD_SCI",
-                    ch_names=[raw.ch_names[ii : ii + 2]],
+                    ch_names=[raw.ch_names[ii : ii + n_wavelengths]],
                 )
     scores = scores[np.argsort(picks)]
     return raw, scores, times
