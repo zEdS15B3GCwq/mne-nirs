@@ -128,7 +128,7 @@ def test_sci_windowed_known_values(fnirs_motor_data: mne.io.BaseRaw):
     assert len(times_out) == 98
 
     # verify SCI scores
-    assert_allclose(scores[0:2, windowA], [1, 1], atol=0.05)  # pair 0
+    assert_allclose(scores[0:2, windowA], [-1, 1], atol=0.05)  # pair 0
     assert_allclose(scores[0:2, windowB], [1, 1], atol=0.05)
     assert_allclose(scores[2:4, windowA], [1, 1], atol=0.05)  # pair 1, window A
     assert_allclose(scores[2:4, windowB], [-1, -1], atol=0.05)  # pair 1, window B

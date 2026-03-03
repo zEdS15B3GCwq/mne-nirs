@@ -68,6 +68,7 @@ def scalp_coupling_index_windowed(
     picks = _validate_nirs_info(raw.info, fnirs="od", which="Scalp coupling index")
     n_wavelengths = len(np.unique(_channel_frequencies(raw.info)))
 
+    zero_mask = np.std(raw._data, axis=-1) == 0
     filtered_data = filter_data(
         raw._data,
         raw.info["sfreq"],
@@ -82,10 +83,8 @@ def scalp_coupling_index_windowed(
     window_samples = int(np.ceil(time_window * raw.info["sfreq"]))
     n_windows = int(np.floor(len(raw) / window_samples))
 
-    scores = np.zeros((len(picks), n_windows))
+    sci = np.zeros((len(picks), n_windows))
     times = []
-
-    print(picks)
 
     for window in range(n_windows):
         start_sample = int(window * window_samples)
@@ -97,30 +96,40 @@ def scalp_coupling_index_windowed(
         times.append((t_start, t_stop))
 
         pair_indices = np.triu_indices(n_wavelengths, k=1)
-        for ii in range(0, len(picks), n_wavelengths):
-            if ii < 9:
-                print(ii, ii + n_wavelengths, start_sample, len(picks))
+        for gg in range(0, len(picks), n_wavelengths):
+            group_data = filtered_data[gg : gg + n_wavelengths, start_sample:end_sample]
 
-            group_data = filtered_data[
-                picks[ii : ii + n_wavelengths], start_sample:end_sample
-            ]
+            # Calculate pairwise correlations within the group
             correlations = []
-            for jj, kk in zip(*pair_indices):
+            for ii, jj in zip(*pair_indices):
                 with np.errstate(invalid="ignore"):
-                    c = np.corrcoef(group_data[jj], group_data[kk])[0][1]
+                    c = np.corrcoef(group_data[ii], group_data[jj])[0][1]
                 if np.isfinite(c):
                     correlations.append(c)
-            c = min(correlations) if correlations else 0.0
-            scores[ii : ii + n_wavelengths, window] = c
-            if ii < 9:
-                print(correlations, c)
 
+            # Use minimum correlation as SCI
+            c = min(correlations) if correlations else 0.0
+
+            # Assign the same SCI value to all channels in the group
+            sci[gg : gg + n_wavelengths, window] = c
+
+            # Add BAD_SCI annotation to channels with SCI below threshold
             if (threshold is not None) & (c < threshold):
                 raw.annotations.append(
                     t_start,
                     time_window,
                     "BAD_SCI",
-                    ch_names=[raw.ch_names[ii : ii + n_wavelengths]],
+                    ch_names=[raw.ch_names[gg : gg + n_wavelengths]],
                 )
-    scores = scores[np.argsort(picks)]
-    return raw, scores, times
+
+    print(sci)
+
+    sci[zero_mask] = 0
+
+    print(sci)
+
+    sci = sci[np.argsort(picks)]  # restore original order
+
+    print(sci)
+
+    return raw, sci, times
