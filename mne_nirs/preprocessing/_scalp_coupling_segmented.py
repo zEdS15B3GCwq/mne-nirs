@@ -85,6 +85,8 @@ def scalp_coupling_index_windowed(
     scores = np.zeros((len(picks), n_windows))
     times = []
 
+    print(picks)
+
     for window in range(n_windows):
         start_sample = int(window * window_samples)
         end_sample = start_sample + window_samples
@@ -96,6 +98,9 @@ def scalp_coupling_index_windowed(
 
         pair_indices = np.triu_indices(n_wavelengths, k=1)
         for ii in range(0, len(picks), n_wavelengths):
+            if ii < 9:
+                print(ii, ii + n_wavelengths, start_sample, len(picks))
+
             group_data = filtered_data[
                 picks[ii : ii + n_wavelengths], start_sample:end_sample
             ]
@@ -107,6 +112,8 @@ def scalp_coupling_index_windowed(
                     correlations.append(c)
             c = min(correlations) if correlations else 0.0
             scores[ii : ii + n_wavelengths, window] = c
+            if ii < 9:
+                print(correlations, c)
 
             if (threshold is not None) & (c < threshold):
                 raw.annotations.append(
