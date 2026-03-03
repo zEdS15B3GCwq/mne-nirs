@@ -62,10 +62,11 @@ def scalp_coupling_index_windowed(
            quality assessment of fNIRS scans." Optics and the Brain.
            Optical Society of America, 2020.
     """
-    raw = raw.copy().load_data()
     _validate_type(raw, BaseRaw, "raw")
 
     picks = _validate_nirs_info(raw.info, fnirs="od", which="Scalp coupling index")
+    raw = raw.copy().pick(picks).load_data()
+
     n_wavelengths = len(np.unique(_channel_frequencies(raw.info)))
 
     zero_mask = np.std(raw._data, axis=-1) == 0
@@ -122,14 +123,14 @@ def scalp_coupling_index_windowed(
                     ch_names=[raw.ch_names[gg : gg + n_wavelengths]],
                 )
 
-    print(sci)
+    # print(sci)
 
     sci[zero_mask] = 0
 
-    print(sci)
+    # print(sci)
 
     sci = sci[np.argsort(picks)]  # restore original order
 
-    print(sci)
+    # print(sci)
 
     return raw, sci, times

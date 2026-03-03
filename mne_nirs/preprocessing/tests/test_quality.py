@@ -25,12 +25,13 @@ def fixture_fnirs_motor_data() -> mne.io.BaseRaw:
 def fixture_fnirs_labnirs_3wl_data() -> mne.io.BaseRaw:
     """Read and return 3-wavelength testing data."""
     pytest.importorskip("h5py")
-    fname_labnirs_3wl = (
-        mne.datasets.testing.data_path(download=False)
-        / "SNIRF"
-        / "Labnirs"
-        / "labnirs_3wl_raw_recording.snirf"
-    )
+    fname_labnirs_3wl = r"C:\Users\dev\mne_data\MNE-testing-data\SNIRF\Labnirs\labnirs_3wl_raw_recording.snirf"
+    # fname_labnirs_3wl = (
+    #     mne.datasets.testing.data_path(download=False)
+    #     / "SNIRF"
+    #     / "Labnirs"
+    #     / "labnirs_3wl_raw_recording.snirf"
+    # )
     raw = mne.io.read_raw_snirf(fname_labnirs_3wl)
     return mne.preprocessing.nirs.optical_density(raw)
 
@@ -166,7 +167,7 @@ def test_sci_windowed_known_values(fnirs_motor_data: mne.io.BaseRaw):
     assert_array_equal(marks.ravel(), expected)
 
 
-@mne.datasets.testing.requires_testing_data
+# @mne.datasets.testing.requires_testing_data
 def test_sci_windowed_known_values_3wl(fnirs_labnirs_3wl_data: mne.io.BaseRaw) -> None:
     """Test segmented SCI with known correlation values for 3-wavelength data.
 
@@ -249,7 +250,7 @@ def test_sci_windowed_known_values_3wl(fnirs_labnirs_3wl_data: mne.io.BaseRaw) -
                 print(ann)
                 marks[tracked_channels.index(ann_name)] = True
 
-    print(scores[0:9, :])
+    # print(scores[0:9, :])
     expected = np.array([False, True, True])
     assert_array_equal(marks, expected)
 
