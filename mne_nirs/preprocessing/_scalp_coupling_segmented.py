@@ -51,7 +51,7 @@ def scalp_coupling_index_windowed(
         Array of peak power values.
     times : list
         List of the start and end times of each window used to compute the
-        peak spectral power.
+        scalp coupling index.
 
     References
     ----------
@@ -64,12 +64,23 @@ def scalp_coupling_index_windowed(
     """
     _validate_type(raw, BaseRaw, "raw")
 
+    # Pick optical density channels
+    # note: picks are ordered according to alphabetical sorting of channel names
+    #       e.g. for names ["S1_D2 830", "S1_D1 830", "S1_D1 780", "S1_D2 780"]
+    #       the order of picks would be [2, 1, 3, 0] (as in `np.argsort(names)`)
+    # note2: if there are channels with cw_amplitude data, picks will not contain them
     picks = _validate_nirs_info(raw.info, fnirs="od", which="Scalp coupling index")
-    raw = raw.copy().pick(picks).load_data()
 
+    # Mne-python/preprocessing/scalp_coupling_index() does this.
+    # However, this may change the order of channels and drop some channels
+    # (see notes about picks above). If we want to preserve the order of channels
+    # and channel names in the `raw` object we return, this cannot be used.
+    # raw = raw.copy().pick(picks).load_data()
+
+    # Number of wavelengths (based on channel naming)
     n_wavelengths = len(np.unique(_channel_frequencies(raw.info)))
 
-    zero_mask = np.std(raw._data, axis=-1) == 0
+    # Bandpass filter data to extract heartbeat-related frequencies
     filtered_data = filter_data(
         raw._data,
         raw.info["sfreq"],
@@ -84,6 +95,7 @@ def scalp_coupling_index_windowed(
     window_samples = int(np.ceil(time_window * raw.info["sfreq"]))
     n_windows = int(np.floor(len(raw) / window_samples))
 
+    # Output variables
     sci = np.zeros((len(picks), n_windows))
     times = []
 
@@ -96,9 +108,13 @@ def scalp_coupling_index_windowed(
         t_stop = raw.times[end_sample]
         times.append((t_start, t_stop))
 
+        # pair indices to calculate correlations between all channels pairs
         pair_indices = np.triu_indices(n_wavelengths, k=1)
+
         for gg in range(0, len(picks), n_wavelengths):
-            group_data = filtered_data[gg : gg + n_wavelengths, start_sample:end_sample]
+            # need to iterate over channels according to the picks list
+            ch_group = picks[gg : gg + n_wavelengths]
+            group_data = filtered_data[ch_group, start_sample:end_sample]
 
             # Calculate pairwise correlations within the group
             correlations = []
@@ -112,7 +128,7 @@ def scalp_coupling_index_windowed(
             c = min(correlations) if correlations else 0.0
 
             # Assign the same SCI value to all channels in the group
-            sci[gg : gg + n_wavelengths, window] = c
+            sci[ch_group, window] = c
 
             # Add BAD_SCI annotation to channels with SCI below threshold
             if (threshold is not None) & (c < threshold):
@@ -120,17 +136,7 @@ def scalp_coupling_index_windowed(
                     t_start,
                     time_window,
                     "BAD_SCI",
-                    ch_names=[raw.ch_names[gg : gg + n_wavelengths]],
+                    ch_names=[[raw.ch_names[ii] for ii in ch_group]],
                 )
-
-    # print(sci)
-
-    sci[zero_mask] = 0
-
-    # print(sci)
-
-    sci = sci[np.argsort(picks)]  # restore original order
-
-    # print(sci)
 
     return raw, sci, times

@@ -106,7 +106,9 @@ def peak_power(
             for jj, kk in zip(*pair_indices):
                 c = np.correlate(group_data[jj], group_data[kk], "full")
                 c = c / window_samples
-                [f, pxx] = periodogram(c, fs=raw.info["sfreq"], window="hamming")
+                [f, pxx] = periodogram(
+                    c, fs=raw.info["sfreq"], window="hamming", scaling="spectrum"
+                )
                 peak_powers.append(max(pxx))
             pp = min(peak_powers) if peak_powers else 0.0
             scores[ii : ii + n_wavelengths, window] = pp
