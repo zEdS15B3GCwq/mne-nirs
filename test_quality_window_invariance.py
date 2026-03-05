@@ -47,15 +47,15 @@ noise = rng.normal(size=(raw.n_times,))
 # raw._data[9] = noisy
 # raw._data[9] += rng.normal(size=(raw.n_times,)) * 0.001
 
-_, sci30, sci_times30 = peak_power(raw, time_window=30, threshold=0.7)
-_, sci60, sci_times60 = peak_power(raw, time_window=60, threshold=0.7)
-_, sci120, sci_times120 = peak_power(raw, time_window=120, threshold=0.7)
+_, pp30, sci_times30 = peak_power(raw, time_window=300, threshold=0.7)
+_, pp60, sci_times60 = peak_power(raw, time_window=200, threshold=0.7)
+_, pp120, sci_times120 = peak_power(raw, time_window=100, threshold=0.7)
 # print(np.max(sci, axis=1).shape)
 
 f = plt.figure()
-plt.plot([t[0] for t in sci_times30], sci30[8, :].ravel(), label="30")
-plt.plot([t[0] for t in sci_times60], sci60[8, :].ravel(), label="60")
-plt.plot([t[0] for t in sci_times120], sci120[8, :].ravel(), label="120")
+plt.plot([t[0] for t in sci_times30], pp30[8, :].ravel(), label="300")
+plt.plot([t[0] for t in sci_times60], pp60[8, :].ravel(), label="200")
+plt.plot([t[0] for t in sci_times120], pp120[8, :].ravel(), label="100")
 plt.xlabel("Window")
 plt.ylabel("PP")
 plt.legend()

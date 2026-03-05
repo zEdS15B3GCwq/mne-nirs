@@ -76,7 +76,7 @@ def fixture_fnirs_datasets(
 
 @mne.datasets.testing.requires_testing_data
 def test_peak_power_runs(fnirs_datasets: list[mne.io.BaseRaw]) -> None:
-    """Test that peak_power() successfully runs with test data."""
+    """Test that `peak_power` successfully runs with test data."""
     for raw in fnirs_datasets:
         _, scores, _ = peak_power(raw.copy())
         assert len(scores) == len(raw.ch_names)
@@ -84,7 +84,7 @@ def test_peak_power_runs(fnirs_datasets: list[mne.io.BaseRaw]) -> None:
 
 @mne.datasets.testing.requires_testing_data
 def test_sci_windowed_runs(fnirs_datasets: list[mne.io.BaseRaw]) -> None:
-    """Test that scalp_coupling_index_windowed() successfully runs with test data."""
+    """Test that `scalp_coupling_index_windowed` successfully runs with test data."""
     for raw in fnirs_datasets:
         _, scores, _ = scalp_coupling_index_windowed(raw.copy())
         assert len(scores) == len(raw.ch_names)
@@ -93,6 +93,8 @@ def test_sci_windowed_runs(fnirs_datasets: list[mne.io.BaseRaw]) -> None:
 def test_quality_scale_invariant(fnirs_motor_data: mne.io.BaseRaw) -> None:
     """Test that SCI and PP are scale and DC-shift invariant."""
     raw = fnirs_motor_data.copy()
+
+    # synthetic signals
     rng = np.random.default_rng(seed=123456)
     t = np.arange(raw.n_times) / raw.info["sfreq"]
     signal = np.sin(2.0 * np.pi * t) - 0.5
@@ -106,65 +108,78 @@ def test_quality_scale_invariant(fnirs_motor_data: mne.io.BaseRaw) -> None:
     raw._data[4:7] = noisy
     raw._data[7] = 0.3 * noisy + 1
 
+    # Channel pairs 4 and 5: actual recording data, one channel scaled
+    raw._data[10] = raw._data[8]
+    raw._data[11] = raw._data[9] * 1.2 + 0.5
+
     # calculate SCI quality
-    _, sci, _ = scalp_coupling_index_windowed(raw, time_window=30, threshold=0.7)
+    _, sci, _ = scalp_coupling_index_windowed(raw, time_window=60, threshold=0.7)
 
     # calculate PP quality
-    _, pp, _ = peak_power(raw, time_window=30, threshold=0.7)
+    _, pp, _ = peak_power(raw, time_window=60, threshold=0.1)
 
-    # verify that pairs 1 and 2 have the same score
-    assert_array_almost_equal(sci[0:4, 10], sci[0, 10])
-    assert_array_almost_equal(pp[0:4, 10], pp[0, 10])
-    # verify that pairs 3 and 4 have the same score
-    assert_array_almost_equal(sci[4:8, 10], sci[4, 10])
-    assert_array_almost_equal(pp[4:8, 10], pp[4, 10])
+    # verify that members of pairs have the same scores despite scaling
+    assert_array_almost_equal(sci[1:4], np.tile(sci[0], (3, 1)))
+    assert_array_almost_equal(pp[1:4], np.tile(pp[0], (3, 1)))
+    assert_array_almost_equal(sci[5:8], np.tile(sci[4], (3, 1)))
+    assert_array_almost_equal(pp[5:8], np.tile(pp[4], (3, 1)))
+    assert_array_almost_equal(sci[9:12], np.tile(sci[8], (3, 1)))
+    assert_array_almost_equal(pp[9:12], np.tile(pp[8], (3, 1)))
 
 
 def test_quality_window_length_invariant(fnirs_motor_data: mne.io.BaseRaw) -> None:
-    """Test that SCI and PP do not depend on window length."""
-    raw = fnirs_motor_data.copy()
-    rng = np.random.default_rng(seed=123456)
-    t = np.arange(raw.n_times) / raw.info["sfreq"]
-    signal = np.sin(2.0 * np.pi * t) - 0.5
-    noisy = (signal + rng.normal(size=(raw.n_times,)) * 3) / 4
-    noise = rng.random(size=(raw.n_times,)) - 0.5
+    """Test that SCI and PP do not depend on window length.
 
-    # Channel pair 1: clean sinusoid data (perfect score)
-    raw._data[0:2] = signal
-    # Channel pair 2: noisy data
-    raw._data[2:4] = noisy
-    # Channel pair 3: noise
-    raw._data[4:6] = noise
+    Notes
+    -----
+    1. Theoretically, the SCI and PSP measures are independent of the window length.
+    In practice, however, different windows capture different data, which means that
+    SCI and PP both depend on exactly what data changes were sampled in a window.
+    Given more-or-less steady data, SCI is fairly independent of window length.
+
+    2. In addition, a discrete `periodogram` inevitably changes with window length as
+    the spectral "resolution" (bin width in the frequency domain) is lower when the
+    window segments are shorter. Shorter windows make wider frequency binds, which
+    make the periodogram noisier. For example, with a window length of 120 seconds,
+    a badly connected channel's PP value might stay steadily below 0.1 in all windows.
+    With a 30-second window, though, the quality measure may vary significantly, and
+    jump above the acceptance threshold in some windows.
+
+    3. Synthetic data is not well suited for testing this invariance, as, for example, a
+    narrowband sinusoid signal's power density will scale with window length. Increasing
+    the window length decreases the "bin" width in the frequency domain, but as the
+    energy band of the signal is narrow, it may not leak into neighbouring bins, and
+    the measured power density will increase. This effect could be counteracted by
+    using the ``scaling='spectrum'`` option, but that changes the results for actual
+    recorded data.
+    """
+    raw = fnirs_motor_data.copy()
+
+    # Another issue
 
     # calculate SCI quality
-    _, sci_45, sci_times_45 = scalp_coupling_index_windowed(
-        raw, time_window=45, threshold=0.7
-    )
-    _, sci_30, sci_times_30 = scalp_coupling_index_windowed(
-        raw, time_window=30, threshold=0.7
-    )
-    _, sci_15, sci_times_15 = scalp_coupling_index_windowed(
-        raw, time_window=15, threshold=0.7
-    )
+    _, sci_15, _ = scalp_coupling_index_windowed(raw, time_window=15, threshold=0.7)
+    _, sci_30, _ = scalp_coupling_index_windowed(raw, time_window=30, threshold=0.7)
+    _, sci_45, _ = scalp_coupling_index_windowed(raw, time_window=45, threshold=0.7)
 
     # calculate PP quality
-    _, pp_45, pp_times_45 = peak_power(raw, time_window=45, threshold=0.7)
-    _, pp_30, pp_times_30 = peak_power(raw, time_window=30, threshold=0.7)
-    _, pp_15, pp_times_15 = peak_power(raw, time_window=15, threshold=0.7)
-
-    import matplotlib.pyplot as plt
-
-    f = plt.figure()
-    plt.subplot(1, 2, 1)
-    plt.plot([t[0] for t in sci_times_45], sci_45[0, :].ravel(), label="45")
-    plt.plot([t[0] for t in sci_times_30], sci_30[0, :].ravel(), label="30")
-    plt.plot([t[0] for t in sci_times_15], sci_15[0, :].ravel(), label="15")
-    plt.legend()
-    plt.show()
+    _, pp_100, _ = peak_power(raw, time_window=100, threshold=0.1)
+    _, pp_200, _ = peak_power(raw, time_window=200, threshold=0.1)
+    _, pp_300, _ = peak_power(raw, time_window=300, threshold=0.1)
 
     # verify that different window-lengths produce nearly the same scores
-    assert_array_almost_equal(sci_30[0:6, 10], sci_15[0:6, 10])
-    assert_array_almost_equal(pp_30[0:6, 10], pp_15[0:6, 10])
+    from scipy.stats import mode
+
+    print(np.mean(pp_100, 1)[:11].ravel())
+    print(np.mean(pp_200, 1)[:11].ravel())
+    print(np.mean(pp_300, 1)[:11].ravel())
+    print(np.std(pp_100, 1)[:11].ravel())
+    print(np.std(pp_200, 1)[:11].ravel())
+    print(np.std(pp_300, 1)[:11].ravel())
+    assert_array_almost_equal(np.mean(sci_15, 1), np.mean(sci_30, 1), decimal=2)
+    assert_array_almost_equal(np.mean(sci_30, 1), np.mean(sci_45, 1), decimal=2)
+    assert False
+    # assert_array_almost_equal(pp_30[0:6, 10], pp_15[0:6, 10])
 
 
 def test_sci_windowed_known_values(fnirs_motor_data: mne.io.BaseRaw):
