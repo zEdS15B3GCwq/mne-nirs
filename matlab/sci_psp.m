@@ -1,4 +1,4 @@
-function [sci, psp, fpsp] = sci_psp(raw, fs, w_sec, w_overlap_sec)
+function [sci, psp, fpsp, periodograms, periodog_t, periodog_f] = sci_psp(raw, fs, w_sec, w_overlap_sec)
 
 filter_in_window = false;
 
@@ -7,7 +7,7 @@ signal2 = raw(2:2:end,:);
 
 % Bandpass filter
 fcut_min = 0.75;
-fcut_max = 2.5;
+fcut_max = 1.6;
 if fcut_max >= fs/2
     fcut_max = fs/2 - eps;
 end
@@ -30,6 +30,11 @@ sci = zeros(size(signal1, 1), n_windows);
 psp = zeros(size(signal1, 1), n_windows);
 fpsp = zeros(size(signal1, 1), n_windows);
 
+n_periodogram = 235;
+periodograms = zeros(size(signal1,1), n_windows, n_periodogram);
+periodog_t = zeros(n_windows, 1);
+periodog_f = zeros(n_periodogram, 1) - 1;
+
 ww = 1;
 while w_end < size(signal1, 2)
     w_end = min(w_start + w_nsamples - 1, size(signal1, 2));
@@ -43,11 +48,11 @@ while w_end < size(signal1, 2)
     end
     sig1 = sig1 - mean(sig1, 2);
     sig2 = sig2 - mean(sig2, 2);
-    if ww==20
-        for i = 1:size(signal1,1)
-            plot(signal1(i,w_start:w_end),'r'), hold on, plot(signal2(i,w_start:w_end),'b'), plot(sig1(i,:),'g'), plot(sig2(i,:),'k')
-        end
-    end
+    % if ww==20
+    %     for i = 1:size(signal1,1)
+    %         plot(signal1(i,w_start:w_end),'r'), hold on, plot(signal2(i,w_start:w_end),'b'), plot(sig1(i,:),'g'), plot(sig2(i,:),'k')
+    %     end
+    % end
 
     for ch = 1 : size(sig1, 1)
         s1 = sig1(ch, :);
@@ -60,13 +65,21 @@ while w_end < size(signal1, 2)
         end
     
         [pxx,f] = periodogram(similarity,hamming(length(similarity)),length(similarity),fs,'power');
+
+        periodograms(ch, ww, 1:length(pxx)) = pxx;
+
         [pwrest,idx] = max(pxx(f<fcut_max));
         sci(ch, ww) = similarity(size(s1,2));
         psp(ch, ww) = pwrest;
         fpsp(ch, ww) = f(idx);
 
     end
+    if periodog_f(1) < 0
+        periodog_f = f;
+    end
+    periodog_t(ww) = w_start;
 
     w_start = w_end + 1 - w_overlap_sec;
     ww = ww + 1;
 end
+periodog_t = periodog_t ./ fs;

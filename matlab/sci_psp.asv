@@ -1,13 +1,13 @@
-function [sci, psp, fpsp] = sci_psp(raw, fs, w_sec, w_overlap_sec)
+function [sci, psp, fpsp, periodograms, periodog_t, periodog_f] = sci_psp(raw, fs, w_sec, w_overlap_sec)
 
-filter_in_window = true;
+filter_in_window = false;
 
 signal1 = raw(1:2:end,:);
 signal2 = raw(2:2:end,:);
 
 % Bandpass filter
-fcut_min = 0.5;
-fcut_max = 1.9531;
+fcut_min = 0.75;
+fcut_max = 1.6;
 if fcut_max >= fs/2
     fcut_max = fs/2 - eps;
 end
@@ -16,9 +16,6 @@ if ~filter_in_window
     filtered_signal1=filtfilt(B,A,signal1);
     filtered_signal2=filtfilt(B,A,signal2);
 end
-
-i=w_sec; plot(signal1(i,:),'r'), hold on, plot(signal2(i,:),'b'), plot(filtered_signal1(i,:),'g'), plot(filtered_signal2(i,:),'k')
-return
 
 % division by std skipped
 
@@ -33,17 +30,29 @@ sci = zeros(size(signal1, 1), n_windows);
 psp = zeros(size(signal1, 1), n_windows);
 fpsp = zeros(size(signal1, 1), n_windows);
 
+n_periodogram = 235;
+periodograms = zeros(28, n_periodogram, n_windows);
+periodog_t = zeros(n_windows, 1);
+periodog_f = zeros(n_periodogram, 1);
+
 ww = 1;
 while w_end < size(signal1, 2)
     w_end = min(w_start + w_nsamples - 1, size(signal1, 2));
 
     if filter_in_window
-        sig1 = filtfilt(B,A,signal1(:, w_start:w:end));
-        sig2 = filtfilt(B,A,signal2(:, w_start:w:end));
+        sig1 = filtfilt(B,A,signal1(:, w_start:w_end));
+        sig2 = filtfilt(B,A,signal2(:, w_start:w_end));
     else
         sig1 = filtered_signal1(:, w_start:w_end);
         sig2 = filtered_signal2(:, w_start:w_end);
     end
+    sig1 = sig1 - mean(sig1, 2);
+    sig2 = sig2 - mean(sig2, 2);
+    % if ww==20
+    %     for i = 1:size(signal1,1)
+    %         plot(signal1(i,w_start:w_end),'r'), hold on, plot(signal2(i,w_start:w_end),'b'), plot(sig1(i,:),'g'), plot(sig2(i,:),'k')
+    %     end
+    % end
 
     for ch = 1 : size(sig1, 1)
         s1 = sig1(ch, :);
@@ -56,6 +65,11 @@ while w_end < size(signal1, 2)
         end
     
         [pxx,f] = periodogram(similarity,hamming(length(similarity)),length(similarity),fs,'power');
+        if ww==20
+            periodograms(ch, :, ww, 1) = pxx;
+            periodog_f = f;
+            periodog_t(ww) = w_start;
+        end
         [pwrest,idx] = max(pxx(f<fcut_max));
         sci(ch, ww) = similarity(size(s1,2));
         psp(ch, ww) = pwrest;
@@ -64,5 +78,7 @@ while w_end < size(signal1, 2)
     end
 
     w_start = w_end + 1 - w_overlap_sec;
+    
     ww = ww + 1;
 end
+periodog_t = periodog_t ./ fs;
