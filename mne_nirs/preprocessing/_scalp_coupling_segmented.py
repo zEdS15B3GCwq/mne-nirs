@@ -112,7 +112,10 @@ def scalp_coupling_index_windowed(
         pair_indices = np.triu_indices(n_wavelengths, k=1)
 
         for gg in range(0, len(picks), n_wavelengths):
-            # need to iterate over channels according to the picks list
+            # The dataset is not guaranteed to be ordered by channel groups.
+            # MNE-Python creates a new dataset only including the picks, so it's
+            # OK to iterate over data rows there. Here, we modify the original
+            # dataset, so the order the picks are in needs to be followed.
             ch_group = picks[gg : gg + n_wavelengths]
             group_data = filtered_data[ch_group, start_sample:end_sample]
 
