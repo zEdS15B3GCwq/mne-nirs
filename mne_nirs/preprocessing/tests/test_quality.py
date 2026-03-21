@@ -521,3 +521,58 @@ def test_peak_power_known_values_multi_wavelength(
 #     assert len(group2_anns) > 0
 #     for ann in group2_anns:
 #         assert set(ann["ch_names"]) == group2_chs
+
+
+def test_sci_windowed_annotations_target_correct_channels():
+    """BAD_SCI annotations must name the channels with poor SCI.
+
+    _validate_nirs_info / _check_channels_ordered returns picks sorted
+    alphabetically by channel name, which can differ from the row order
+    in raw._data.  The buggy code uses the loop variable ``ii`` (an index
+    into ``picks``) directly as a channel index into ``raw.ch_names``,
+    causing annotations to be attached to the wrong channels.
+    """
+    sfreq = 10.0
+    n_samples = 400  # 40 s at 10 Hz → 4 windows of 10 s
+
+    # Channels stored in NON-alphabetical order: S2_D1 first, S1_D1 second.
+    # _validate_nirs_info / _check_channels_ordered sorts picks alphabetically,
+    # so it returns picks = [2, 3, 0, 1] instead of [0, 1, 2, 3].
+    ch_names = ["S2_D1 760", "S2_D1 850", "S1_D1 760", "S1_D1 850"]
+    ch_types = ["fnirs_od"] * 4
+
+    info = mne.create_info(ch_names=ch_names, sfreq=sfreq, ch_types=ch_types)
+    for ch in info["chs"]:
+        # Wavelength must be stored in loc[9] (required by _validate_nirs_info).
+        ch["loc"][9] = float(ch["ch_name"].split(" ")[1])
+
+    rng = np.random.default_rng(0)
+    signal = rng.standard_normal(n_samples)
+
+    # S2_D1 (raw._data rows 0, 1): identical  → SCI = +1.0  (GOOD, above threshold)
+    # S1_D1 (raw._data rows 2, 3): anti-corr  → SCI = −1.0  (BAD,  below threshold)
+    data = np.array([signal, signal, signal, -signal], dtype=float)
+
+    raw = mne.io.RawArray(data, info)
+    raw_out, _, _ = scalp_coupling_index_windowed(raw, time_window=10, threshold=0.1)
+
+    bad_annotations = [
+        ann for ann in raw_out.annotations if ann["description"] == "BAD_SCI"
+    ]
+    assert len(bad_annotations) > 0, "Expected BAD_SCI annotations for the S1_D1 pair"
+
+    for ann in bad_annotations:
+        annotated = ann["ch_names"]  # tuple of channel names for this annotation
+        # The bad pair is S1_D1; the bug wrongly blames S2_D1 (raw.ch_names[0:2]).
+        assert "S1_D1 760" in annotated, (
+            f"BAD_SCI should name 'S1_D1 760' (bad channel), got {annotated}"
+        )
+        assert "S1_D1 850" in annotated, (
+            f"BAD_SCI should name 'S1_D1 850' (bad channel), got {annotated}"
+        )
+        assert "S2_D1 760" not in annotated, (
+            f"'S2_D1 760' is a good channel and must not appear in BAD_SCI, got {annotated}"
+        )
+        assert "S2_D1 850" not in annotated, (
+            f"'S2_D1 850' is a good channel and must not appear in BAD_SCI, got {annotated}"
+        )
