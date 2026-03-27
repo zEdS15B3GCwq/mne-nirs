@@ -21,7 +21,7 @@ def scalp_coupling_index_windowed(
     verbose=False,
 ):
     """
-    Compute scalp coupling index for each channel and time window.
+    Compute scalp coupling index (SCI) for each channel and time window.
 
     As described in [1]_ and [2]_.
     This method provides a metric of data quality along the duration of
@@ -46,12 +46,11 @@ def scalp_coupling_index_windowed(
     Returns
     -------
     raw : instance of Raw
-        The Raw data. Optionally annotated with bad segments.
+        Copy of the input raw data. Optionally annotated with bad segments.
     scores : array (n_nirs, n_windows)
-        Array of peak power values.
+        Array of SCI values.
     times : list
-        List of the start and end times of each window used to compute the
-        scalp coupling index.
+        List of the start and end times of each window used to compute SCI.
 
     References
     ----------
@@ -69,15 +68,20 @@ def scalp_coupling_index_windowed(
     _validate_type(raw, BaseRaw, "raw")
 
     # Pick optical density channels
-    # note: picks are ordered according to alphabetical sorting of channel names
-    #       e.g. for names ["S1_D2 830", "S1_D1 830", "S1_D1 780", "S1_D2 780"]
-    #       the order of picks would be [2, 1, 3, 0] (as in `np.argsort(names)`)
+    # Note: picks are ordered according to the alphabetical sorting of the
+    # channel names (as in `np.argsort(names)`). E.g, for names ["S1_D2 830",
+    # "S1_D1 830", "S1_D1 780", "S1_D2 780"], the order of picks would be
+    # [2, 1, 3, 0]. Data rows belonging to the same source-detector channel
+    # group may not be adjacent to each other in the dataset, but in `picks`
+    # they are grouped together.
     picks = _validate_nirs_info(raw.info, fnirs="od", which="Scalp coupling index")
 
     # Number of wavelengths (based on channel naming)
     n_wavelengths = len(np.unique(_channel_frequencies(raw.info)))
 
     # Bandpass filter data to extract heartbeat-related frequencies
+    # Note: filtering is applied only to the selected channels (picks),
+    # with channel order preserved, regardless of how the picks are ordered.
     filtered_data = filter_data(
         raw._data,
         raw.info["sfreq"],
@@ -88,35 +92,8 @@ def scalp_coupling_index_windowed(
         l_trans_bandwidth=l_trans_bandwidth,
         h_trans_bandwidth=h_trans_bandwidth,
     )
-    print(raw.ch_names[:10])
-    print(picks)
 
-    picks = [0, 1, 2]
-    filtered_data = filter_data(
-        raw._data,
-        raw.info["sfreq"],
-        l_freq,
-        h_freq,
-        picks=picks,
-        verbose=verbose,
-        l_trans_bandwidth=l_trans_bandwidth,
-        h_trans_bandwidth=h_trans_bandwidth,
-    )
-    print(filtered_data[:3, :3])
-    picks = [2, 3, 4]
-    filtered_data = filter_data(
-        raw._data,
-        raw.info["sfreq"],
-        l_freq,
-        h_freq,
-        picks=picks,
-        verbose=verbose,
-        l_trans_bandwidth=l_trans_bandwidth,
-        h_trans_bandwidth=h_trans_bandwidth,
-    )
-    print(filtered_data[:3, :3])
-    return
-
+    # Length and number of windows
     window_samples = int(np.ceil(time_window * raw.info["sfreq"]))
     n_windows = int(np.floor(len(raw) / window_samples))
 
@@ -126,8 +103,7 @@ def scalp_coupling_index_windowed(
 
     for window in range(n_windows):
         start_sample = int(window * window_samples)
-        end_sample = start_sample + window_samples
-        end_sample = np.min([end_sample, len(raw) - 1])
+        end_sample = np.min([start_sample + window_samples, len(raw) - 1])
 
         t_start = raw.times[start_sample]
         t_stop = raw.times[end_sample]
@@ -136,17 +112,16 @@ def scalp_coupling_index_windowed(
         # pair indices to calculate correlations between all channels pairs
         pair_indices = np.triu_indices(n_wavelengths, k=1)
 
+        # iterate over channel groups defined by `picks`
         for gg in range(0, len(picks), n_wavelengths):
-            # The dataset is not guaranteed to be ordered by channel groups.
-            # MNE-Python creates a new dataset only including the picks, so it's
-            # OK to iterate over data rows there. Here, we modify the original
-            # dataset, so the order the picks are in needs to be followed.
             ch_group = picks[gg : gg + n_wavelengths]
             group_data = filtered_data[ch_group, start_sample:end_sample]
 
             # Calculate pairwise correlations within the group
             correlations = []
             for ii, jj in zip(*pair_indices):
+                # `corrcoef` throws an error when the data has a near-0 std;
+                # with "ignore" set, it returns a NaN instead
                 with np.errstate(invalid="ignore"):
                     c = np.corrcoef(group_data[ii], group_data[jj])[0][1]
                 if np.isfinite(c):
