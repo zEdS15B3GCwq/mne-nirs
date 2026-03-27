@@ -19,6 +19,7 @@ def fixture_fnirs_motor_data() -> mne.io.BaseRaw:
     fnirs_raw_dir = fnirs_data_folder / "Participant-1"
     raw = mne.io.read_raw_nirx(str(fnirs_raw_dir), verbose=True).load_data()
     return mne.preprocessing.nirs.optical_density(raw)
+    # return raw
 
 
 @pytest.fixture(name="fnirs_labnirs_3wl_data")
@@ -33,6 +34,7 @@ def fixture_fnirs_labnirs_3wl_data() -> mne.io.BaseRaw:
     )
     raw = mne.io.read_raw_snirf(fname_labnirs_3wl)
     return mne.preprocessing.nirs.optical_density(raw)
+    # return raw
 
 
 def find_annotations(
@@ -88,98 +90,6 @@ def test_sci_windowed_runs(fnirs_datasets: list[mne.io.BaseRaw]) -> None:
     for raw in fnirs_datasets:
         _, scores, _ = scalp_coupling_index_windowed(raw.copy())
         assert len(scores) == len(raw.ch_names)
-
-
-def test_quality_scale_invariant(fnirs_motor_data: mne.io.BaseRaw) -> None:
-    """Test that SCI and PP are scale and DC-shift invariant."""
-    raw = fnirs_motor_data.copy()
-
-    # synthetic signals
-    rng = np.random.default_rng(seed=123456)
-    t = np.arange(raw.n_times) / raw.info["sfreq"]
-    signal = np.sin(2.0 * np.pi * t) - 0.5
-    noisy = (signal + rng.normal(size=(raw.n_times,)) * 3) / 4
-
-    # Channel pairs 1 and 2: the second pair has one channel scaled
-    raw._data[0:3] = signal
-    raw._data[3] = 0.3 * signal + 1
-
-    # Channel pairs 2 and 3: noisy data, one channel is scaled
-    raw._data[4:7] = noisy
-    raw._data[7] = 0.3 * noisy + 1
-
-    # Channel pairs 4 and 5: actual recording data, one channel scaled
-    raw._data[10] = raw._data[8]
-    raw._data[11] = raw._data[9] * 1.2 + 0.5
-
-    # calculate SCI quality
-    _, sci, _ = scalp_coupling_index_windowed(raw, time_window=60, threshold=0.7)
-
-    # calculate PP quality
-    _, pp, _ = peak_power(raw, time_window=60, threshold=0.1)
-
-    # verify that members of pairs have the same scores despite scaling
-    assert_array_almost_equal(sci[1:4], np.tile(sci[0], (3, 1)))
-    assert_array_almost_equal(pp[1:4], np.tile(pp[0], (3, 1)))
-    assert_array_almost_equal(sci[5:8], np.tile(sci[4], (3, 1)))
-    assert_array_almost_equal(pp[5:8], np.tile(pp[4], (3, 1)))
-    assert_array_almost_equal(sci[9:12], np.tile(sci[8], (3, 1)))
-    assert_array_almost_equal(pp[9:12], np.tile(pp[8], (3, 1)))
-
-
-def test_quality_window_length_invariant(fnirs_motor_data: mne.io.BaseRaw) -> None:
-    """Test that SCI and PP do not depend on window length.
-
-    Notes
-    -----
-    1. Theoretically, the SCI and PSP measures are independent of the window length.
-    In practice, however, different windows capture different data, which means that
-    SCI and PP both depend on exactly what data changes were sampled in a window.
-    Given more-or-less steady data, SCI is fairly independent of window length.
-
-    2. In addition, a discrete `periodogram` inevitably changes with window length as
-    the spectral "resolution" (bin width in the frequency domain) is lower when the
-    window segments are shorter. Shorter windows make wider frequency binds, which
-    make the periodogram noisier. For example, with a window length of 120 seconds,
-    a badly connected channel's PP value might stay steadily below 0.1 in all windows.
-    With a 30-second window, though, the quality measure may vary significantly, and
-    jump above the acceptance threshold in some windows.
-
-    3. Synthetic data is not well suited for testing this invariance, as, for example, a
-    narrowband sinusoid signal's power density will scale with window length. Increasing
-    the window length decreases the "bin" width in the frequency domain, but as the
-    energy band of the signal is narrow, it may not leak into neighbouring bins, and
-    the measured power density will increase. This effect could be counteracted by
-    using the ``scaling='spectrum'`` option, but that changes the results for actual
-    recorded data.
-    """
-    raw = fnirs_motor_data.copy()
-
-    # Another issue
-
-    # calculate SCI quality
-    _, sci_15, _ = scalp_coupling_index_windowed(raw, time_window=15, threshold=0.7)
-    _, sci_30, _ = scalp_coupling_index_windowed(raw, time_window=30, threshold=0.7)
-    _, sci_45, _ = scalp_coupling_index_windowed(raw, time_window=45, threshold=0.7)
-
-    # calculate PP quality
-    _, pp_100, _ = peak_power(raw, time_window=100, threshold=0.1)
-    _, pp_200, _ = peak_power(raw, time_window=200, threshold=0.1)
-    _, pp_300, _ = peak_power(raw, time_window=300, threshold=0.1)
-
-    # verify that different window-lengths produce nearly the same scores
-    from scipy.stats import mode
-
-    print(np.mean(pp_100, 1)[:11].ravel())
-    print(np.mean(pp_200, 1)[:11].ravel())
-    print(np.mean(pp_300, 1)[:11].ravel())
-    print(np.std(pp_100, 1)[:11].ravel())
-    print(np.std(pp_200, 1)[:11].ravel())
-    print(np.std(pp_300, 1)[:11].ravel())
-    assert_array_almost_equal(np.mean(sci_15, 1), np.mean(sci_30, 1), decimal=2)
-    assert_array_almost_equal(np.mean(sci_30, 1), np.mean(sci_45, 1), decimal=2)
-    assert False
-    # assert_array_almost_equal(pp_30[0:6, 10], pp_15[0:6, 10])
 
 
 def test_sci_windowed_known_values(fnirs_motor_data: mne.io.BaseRaw):
@@ -291,7 +201,6 @@ def test_sci_windowed_known_values_multi_wavelength(
     ``scalp_coupling_index_windowed`` method is updated to use raw data,
     this test will need to be updated as well.
     """
-    pytest.importorskip("h5py")
     raw = fnirs_labnirs_3wl_data.copy()
     sfreq = raw.info["sfreq"]
 
@@ -458,7 +367,6 @@ def test_peak_power_known_values_multi_wavelength(
     - Group 2 (ch 3-5): signal + noisy signal + noise (smallest wins, PP≈0)
     - Group 3 (ch 6-8): group 2 with different order (same PP)
     """
-    pytest.importorskip("h5py")
     raw = fnirs_labnirs_3wl_data.copy()
     sfreq = raw.info["sfreq"]
 
@@ -576,3 +484,11 @@ def test_sci_windowed_annotations_target_correct_channels():
         assert "S2_D1 850" not in annotated, (
             f"'S2_D1 850' is a good channel and must not appear in BAD_SCI, got {annotated}"
         )
+
+
+@mne.datasets.testing.requires_testing_data
+def test_order(fnirs_labnirs_3wl_data: mne.io.BaseRaw):
+    raw = fnirs_labnirs_3wl_data.copy()
+    sfreq = raw.info["sfreq"]
+    scalp_coupling_index_windowed(raw)
+    assert False

@@ -62,20 +62,17 @@ def scalp_coupling_index_windowed(
            quality assessment of fNIRS scans." Optics and the Brain.
            Optical Society of America, 2020.
     """
+    # Make a copy of the data and ensure it's loaded into memory
+    raw = raw.copy().load_data()
+
+    # Validate that the input contains raw fNIRS data
     _validate_type(raw, BaseRaw, "raw")
 
     # Pick optical density channels
     # note: picks are ordered according to alphabetical sorting of channel names
     #       e.g. for names ["S1_D2 830", "S1_D1 830", "S1_D1 780", "S1_D2 780"]
     #       the order of picks would be [2, 1, 3, 0] (as in `np.argsort(names)`)
-    # note2: if there are channels with cw_amplitude data, picks will not contain them
     picks = _validate_nirs_info(raw.info, fnirs="od", which="Scalp coupling index")
-
-    # Mne-python/preprocessing/scalp_coupling_index() does this.
-    # However, this may change the order of channels and drop some channels
-    # (see notes about picks above). If we want to preserve the order of channels
-    # and channel names in the `raw` object we return, this cannot be used.
-    # raw = raw.copy().pick(picks).load_data()
 
     # Number of wavelengths (based on channel naming)
     n_wavelengths = len(np.unique(_channel_frequencies(raw.info)))
@@ -91,6 +88,34 @@ def scalp_coupling_index_windowed(
         l_trans_bandwidth=l_trans_bandwidth,
         h_trans_bandwidth=h_trans_bandwidth,
     )
+    print(raw.ch_names[:10])
+    print(picks)
+
+    picks = [0, 1, 2]
+    filtered_data = filter_data(
+        raw._data,
+        raw.info["sfreq"],
+        l_freq,
+        h_freq,
+        picks=picks,
+        verbose=verbose,
+        l_trans_bandwidth=l_trans_bandwidth,
+        h_trans_bandwidth=h_trans_bandwidth,
+    )
+    print(filtered_data[:3, :3])
+    picks = [2, 3, 4]
+    filtered_data = filter_data(
+        raw._data,
+        raw.info["sfreq"],
+        l_freq,
+        h_freq,
+        picks=picks,
+        verbose=verbose,
+        l_trans_bandwidth=l_trans_bandwidth,
+        h_trans_bandwidth=h_trans_bandwidth,
+    )
+    print(filtered_data[:3, :3])
+    return
 
     window_samples = int(np.ceil(time_window * raw.info["sfreq"]))
     n_windows = int(np.floor(len(raw) / window_samples))
