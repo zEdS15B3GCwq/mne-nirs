@@ -92,7 +92,7 @@ def test_sci_windowed_runs(fnirs_datasets: list[mne.io.BaseRaw]) -> None:
         assert len(scores) == len(raw.ch_names)
 
 
-def test_sci_windowed_known_values(fnirs_motor_data: mne.io.BaseRaw):
+def test_sci_windowed_known_values_succeeds(fnirs_motor_data: mne.io.BaseRaw):
     """Test segmented SCI with known correlation values for 2-wavelength data.
 
     Three channel pairs are overwritten with synthetic data that produce
@@ -181,7 +181,7 @@ def test_sci_windowed_known_values(fnirs_motor_data: mne.io.BaseRaw):
 
 
 @mne.datasets.testing.requires_testing_data
-def test_sci_windowed_known_values_multi_wavelength(
+def test_sci_windowed_known_values_multi_wavelength_succeeds(
     fnirs_labnirs_3wl_data: mne.io.BaseRaw,
 ) -> None:
     """Test segmented SCI with known correlation values for >=3-wavelength data.
@@ -253,7 +253,7 @@ def test_sci_windowed_known_values_multi_wavelength(
     assert_array_equal(marks.ravel(), expected)
 
 
-def test_peak_power_known_values(fnirs_motor_data: mne.io.BaseRaw) -> None:
+def test_peak_power_known_values_succeeds(fnirs_motor_data: mne.io.BaseRaw) -> None:
     """Test segmented PP with known spectral properties for 2-wavelength data.
 
     First, test channels are overwritten with a sinusoid wave. Then, test data
@@ -353,7 +353,7 @@ def test_peak_power_known_values(fnirs_motor_data: mne.io.BaseRaw) -> None:
 
 
 @mne.datasets.testing.requires_testing_data
-def test_peak_power_known_values_multi_wavelength(
+def test_peak_power_known_values_multi_wavelength_succeeds(
     fnirs_labnirs_3wl_data: mne.io.BaseRaw,
 ) -> None:
     """Test segmented PP with known spectral properties for >=3-wavelength data.
@@ -361,7 +361,7 @@ def test_peak_power_known_values_multi_wavelength(
     This test focuses on multi-wavelength specific cases that were not covered
     in the 2-wavelength test, using the labnirs 3-wavelength SNIRF recording
     (250 samples at 19.6 Hz). The recording is long enough for three 4-second
-    windows, and tests are evaluated in the middle one.
+    windows, of which the tests are evaluated in the middle one.
 
     - Group 1 (ch 0-2): in-band sinusoid throughout (perfect PP)
     - Group 2 (ch 3-5): signal + noisy signal + noise (smallest wins, PP≈0)
@@ -431,22 +431,24 @@ def test_peak_power_known_values_multi_wavelength(
 #         assert set(ann["ch_names"]) == group2_chs
 
 
-def test_sci_windowed_annotations_target_correct_channels():
-    """BAD_SCI annotations must name the channels with poor SCI.
+def test_sci_windowed_annotations_target_correct_channels_succeeds() -> None:
+    """Test that BAD_SCI annotations are assigned to the correct channels.
 
     _validate_nirs_info / _check_channels_ordered returns picks sorted
     alphabetically by channel name, which can differ from the row order
-    in raw._data.  The buggy code uses the loop variable ``ii`` (an index
-    into ``picks``) directly as a channel index into ``raw.ch_names``,
-    causing annotations to be attached to the wrong channels.
+    in raw._data. This test verifies that annotations are added to the
+    correct channels regardless of the order of the channel names.
     """
     sfreq = 10.0
     n_samples = 400  # 40 s at 10 Hz → 4 windows of 10 s
 
-    # Channels stored in NON-alphabetical order: S2_D1 first, S1_D1 second.
-    # _validate_nirs_info / _check_channels_ordered sorts picks alphabetically,
-    # so it returns picks = [2, 3, 0, 1] instead of [0, 1, 2, 3].
-    ch_names = ["S2_D1 760", "S2_D1 850", "S1_D1 760", "S1_D1 850"]
+    # Channels (both wavelengths and S-D numbers) stored in NON-alphabetical order
+    ch_names = [
+        "S2_D1 760",
+        "S1_D1 850",
+        "S1_D1 760",
+        "S2_D1 850",
+    ]
     ch_types = ["fnirs_od"] * 4
 
     info = mne.create_info(ch_names=ch_names, sfreq=sfreq, ch_types=ch_types)
@@ -457,38 +459,15 @@ def test_sci_windowed_annotations_target_correct_channels():
     rng = np.random.default_rng(0)
     signal = rng.standard_normal(n_samples)
 
-    # S2_D1 (raw._data rows 0, 1): identical  → SCI = +1.0  (GOOD, above threshold)
-    # S1_D1 (raw._data rows 2, 3): anti-corr  → SCI = −1.0  (BAD,  below threshold)
+    # S1_D1 (raw._data rows 2, 1): identical  → SCI = +1.0  (GOOD, above threshold)
+    # S2_D1 (raw._data rows 0, 3): anti-corr  → SCI = −1.0  (BAD,  below threshold)
     data = np.array([signal, signal, signal, -signal], dtype=float)
 
     raw = mne.io.RawArray(data, info)
-    raw_out, _, _ = scalp_coupling_index_windowed(raw, time_window=10, threshold=0.1)
+    raw_out, _, _ = scalp_coupling_index_windowed(raw, time_window=10, threshold=0.7)
 
     bad_annotations = [
         ann for ann in raw_out.annotations if ann["description"] == "BAD_SCI"
     ]
-    assert len(bad_annotations) > 0, "Expected BAD_SCI annotations for the S1_D1 pair"
-
-    for ann in bad_annotations:
-        annotated = ann["ch_names"]  # tuple of channel names for this annotation
-        # The bad pair is S1_D1; the bug wrongly blames S2_D1 (raw.ch_names[0:2]).
-        assert "S1_D1 760" in annotated, (
-            f"BAD_SCI should name 'S1_D1 760' (bad channel), got {annotated}"
-        )
-        assert "S1_D1 850" in annotated, (
-            f"BAD_SCI should name 'S1_D1 850' (bad channel), got {annotated}"
-        )
-        assert "S2_D1 760" not in annotated, (
-            f"'S2_D1 760' is a good channel and must not appear in BAD_SCI, got {annotated}"
-        )
-        assert "S2_D1 850" not in annotated, (
-            f"'S2_D1 850' is a good channel and must not appear in BAD_SCI, got {annotated}"
-        )
-
-
-@mne.datasets.testing.requires_testing_data
-def test_order(fnirs_labnirs_3wl_data: mne.io.BaseRaw):
-    raw = fnirs_labnirs_3wl_data.copy()
-    sfreq = raw.info["sfreq"]
-    scalp_coupling_index_windowed(raw)
-    assert False
+    bad_channels = {ann["ch_names"] for ann in bad_annotations}
+    assert bad_channels == {("S2_D1 760", "S2_D1 850")}
