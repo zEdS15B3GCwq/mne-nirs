@@ -7,7 +7,7 @@ from pathlib import Path
 import mne  # type: ignore
 import numpy as np
 import pytest
-from numpy.testing import assert_allclose, assert_array_almost_equal, assert_array_equal
+from numpy.testing import assert_allclose, assert_array_equal
 
 from mne_nirs.preprocessing import peak_power, scalp_coupling_index_windowed
 
@@ -418,7 +418,8 @@ def test_peak_power_known_values_multi_wavelength_succeeds(
 #     assert scores[0, 2] > scores[3, 2]
 #     assert scores[3, 2] < 0.75
 
-#     # Group 2 W2 (all-zero) must have BAD_PeakPower covering all 3 channels of the group
+#     # Group 2 W2 (all-zero) must have BAD_PeakPower covering all 3 channels
+#     # of the group
 #     group2_chs = set(raw.ch_names[3:6])
 #     group2_anns = [
 #         ann
