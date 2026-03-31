@@ -92,7 +92,7 @@ def test_sci_windowed_runs(fnirs_datasets: list[mne.io.BaseRaw]) -> None:
         assert len(scores) == len(raw.ch_names)
 
 
-def test_sci_windowed_known_values_succeeds(fnirs_motor_data: mne.io.BaseRaw):
+def test_sci_windowed_known_values(fnirs_motor_data: mne.io.BaseRaw):
     """Test segmented SCI with known correlation values for 2-wavelength data.
 
     Three channel pairs are overwritten with synthetic data that produce
@@ -181,7 +181,7 @@ def test_sci_windowed_known_values_succeeds(fnirs_motor_data: mne.io.BaseRaw):
 
 
 @mne.datasets.testing.requires_testing_data
-def test_sci_windowed_known_values_multi_wavelength_succeeds(
+def test_sci_windowed_known_values_multi_wavelength(
     fnirs_labnirs_3wl_data: mne.io.BaseRaw,
 ) -> None:
     """Test segmented SCI with known correlation values for >=3-wavelength data.
@@ -253,7 +253,7 @@ def test_sci_windowed_known_values_multi_wavelength_succeeds(
     assert_array_equal(marks.ravel(), expected)
 
 
-def test_peak_power_known_values_succeeds(fnirs_motor_data: mne.io.BaseRaw) -> None:
+def test_peak_power_known_values(fnirs_motor_data: mne.io.BaseRaw) -> None:
     """Test segmented PP with known spectral properties for 2-wavelength data.
 
     First, test channels are overwritten with a sinusoid wave. Then, test data
@@ -353,7 +353,7 @@ def test_peak_power_known_values_succeeds(fnirs_motor_data: mne.io.BaseRaw) -> N
 
 
 @mne.datasets.testing.requires_testing_data
-def test_peak_power_known_values_multi_wavelength_succeeds(
+def test_peak_power_known_values_multi_wavelength(
     fnirs_labnirs_3wl_data: mne.io.BaseRaw,
 ) -> None:
     """Test segmented PP with known spectral properties for >=3-wavelength data.
@@ -376,24 +376,26 @@ def test_peak_power_known_values_multi_wavelength_succeeds(
     rng = np.random.default_rng(seed=123456)
     t = np.arange(raw.n_times) / sfreq
     signal = np.sin(2 * np.pi * 1.0 * t) - 0.5  # base "heartbeat", 1 Hz
+    noheart = (
+        np.sin(2 * np.pi * 0.1 * t) + np.sin(2 * np.pi * 3 * t) - 0.5
+    )  # 0.1 Hz + 3 Hz, not in the 0.5-2.5 Hz PP band
     noisy = signal + rng.normal(size=(raw.n_times,)) * 2
-    noise = rng.random(size=(raw.n_times,)) - 0.5
 
     # write the same signal in all the used channels
-    # no need to use copy() for signal as the data is not modified later on
-    # if part of the data is overwritten (as in the 2-wl test), copy() is needed
+    # No need to use copy() for signal as the data is not modified later on.
+    # If part of the data were overwritten (as in the 2-wl test),
+    # copy() would be needed.
     raw._data[0:num_channels] = signal[np.newaxis, :]
 
-    # Group 1 (ch 0, 1, 2): all perfectly correlated
+    # Group 1 (ch 0, 1, 2): all perfectly correlated, no need to change
 
     # Group 2 (ch 3, 4, 5):
-    # base signal + noisy signal + noise
-    # test data in one channel is tested against base signal in the other
-    # raw._data[4] = noisy
-    # raw._data[5] = noise
+    # base signal, noisy signal, no heart signal, should have very low PP
+    raw._data[4] = noisy
+    raw._data[5] = noheart
 
-    # Group 3 (ch 6, 7, 8): group 2 reordered
-    raw._data[6] = noise
+    # Group 3 (ch 6, 7, 8): group 2 reordered, should have the same PP
+    raw._data[6] = noheart
     raw._data[8] = noisy
 
     # calculate PP quality
@@ -404,13 +406,12 @@ def test_peak_power_known_values_multi_wavelength_succeeds(
     assert len(times_out) == 3
 
     # verify scores
-    print(scores)
-    assert False
-    assert_allclose(scores[0:3, 1], 10, atol=0.05)  # pairs 0 and 1
-    # assert_allclose(scores[3:6, 1], [10, 10], atol=0.05)  # pair 2, window A
-    # assert_allclose(scores[4:6, 1], [3.5, 3.5], atol=0.05)  # pair 2, window B
-    # assert_allclose(scores[6:8, 1], [0, 0], atol=0.05)  # pair 3, window A
-    # assert_allclose(scores[6:8, 1], [0, 0], atol=0.05)  # pair 3, window B
+    print(scores[:9, 1])
+    assert_allclose(scores[0:3, 1], 1.34, atol=0.05)  # group 0
+    assert_allclose(scores[3:9, 1], 0.03, atol=0.05)  # groups 2 and 3
+    assert_array_equal(
+        scores[3:6, 1], scores[6:9, 1]
+    )  # groups 2 and 3 should be the same
 
 
 #     # Group 1 PP > group 2 PP (group 2 W2 all-zero -> PP≈0)
@@ -432,7 +433,7 @@ def test_peak_power_known_values_multi_wavelength_succeeds(
 #         assert set(ann["ch_names"]) == group2_chs
 
 
-def test_sci_windowed_annotations_target_correct_channels_succeeds() -> None:
+def test_sci_windowed_annotations_target_correct_channels() -> None:
     """Test that BAD_SCI annotations are assigned to the correct channels.
 
     _validate_nirs_info / _check_channels_ordered returns picks sorted
