@@ -66,7 +66,8 @@ def peak_power(
     # Copy raw to avoid modifying original and load data into memory
     raw = raw.copy().load_data()
 
-    # Validate raw object, but note that raw type is not verified here
+    # Validate that the input contains raw fNIRS data
+    # Note that peak_power currently does not require a specific data type (e.g. OD)
     _validate_type(raw, BaseRaw, "raw")
 
     # `picks` returns a list of channels ordered alphanumerically and grouped by
@@ -74,10 +75,12 @@ def peak_power(
     # `picks` can be differ from the order of channels in `raw`.
     picks = _validate_nirs_info(raw.info)
 
-    # Number of wavelengths based on channel names
+    # Number of wavelengths extracted from channel names
     n_wavelengths = len(np.unique(_channel_frequencies(raw.info)))
 
-    # Bandpass filter data to focus on cardiac pulsation frequencies
+    # Bandpass filter data to extract heartbeat-related frequencies
+    # Note: filtering is applied only to the selected channels (picks),
+    # with channel order preserved, regardless of how the picks are ordered.
     filtered_data = filter_data(
         raw._data,
         raw.info["sfreq"],
@@ -103,7 +106,9 @@ def peak_power(
         t_stop = raw.times[end_sample]
         times.append((t_start, t_stop))
 
+        # pair indices for all channels pairs
         pair_indices = np.triu_indices(n_wavelengths, k=1)
+
         for gg in range(0, len(picks), n_wavelengths):
             ch_group = picks[gg : gg + n_wavelengths]
             group_data = filtered_data[ch_group, start_sample:end_sample]
@@ -117,11 +122,13 @@ def peak_power(
                 [_, pxx] = periodogram(c, fs=raw.info["sfreq"], window="hamming")
                 peak_powers.append(max(pxx))
 
-            # Take the minimum peak power across pairs
+            # Use the minimum value in the group as peak power
             pp = min(peak_powers) if peak_powers else 0.0
+
+            # Assign the same peak power value to all channels in the group
             scores[ch_group, window] = pp
 
-            # Annotate group channels in this window if below threshold
+            # Add BAD_PeakPower annotation to channels if below threshold
             if (threshold is not None) & (pp < threshold):
                 raw.annotations.append(
                     t_start,

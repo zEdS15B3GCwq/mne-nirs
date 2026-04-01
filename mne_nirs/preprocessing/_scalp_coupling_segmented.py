@@ -68,15 +68,12 @@ def scalp_coupling_index_windowed(
     _validate_type(raw, BaseRaw, "raw")
 
     # Pick optical density channels
-    # Note: picks are ordered according to the alphabetical sorting of the
-    # channel names (as in `np.argsort(names)`). E.g, for names ["S1_D2 830",
-    # "S1_D1 830", "S1_D1 780", "S1_D2 780"], the order of picks would be
-    # [2, 1, 3, 0]. Data rows belonging to the same source-detector channel
-    # group may not be adjacent to each other in the dataset, but in `picks`
-    # they are grouped together.
+    # `picks` returns a list of channels ordered alphanumerically and grouped by
+    # channel groups (i.e. same source-detector pair). The order of channels in
+    # `picks` can be differ from the order of channels in `raw`.
     picks = _validate_nirs_info(raw.info, fnirs="od", which="Scalp coupling index")
 
-    # Number of wavelengths (based on channel naming)
+    # Number of wavelengths extracted from channel names
     n_wavelengths = len(np.unique(_channel_frequencies(raw.info)))
 
     # Bandpass filter data to extract heartbeat-related frequencies
@@ -109,7 +106,7 @@ def scalp_coupling_index_windowed(
         t_stop = raw.times[end_sample]
         times.append((t_start, t_stop))
 
-        # pair indices to calculate correlations between all channels pairs
+        # pair indices for all channels pairs
         pair_indices = np.triu_indices(n_wavelengths, k=1)
 
         # iterate over channel groups defined by `picks`
@@ -127,13 +124,13 @@ def scalp_coupling_index_windowed(
                 if np.isfinite(c):
                     correlations.append(c)
 
-            # Use minimum correlation as SCI
+            # Use the minimum correlation in the group as SCI
             c = min(correlations) if correlations else 0.0
 
             # Assign the same SCI value to all channels in the group
             sci[ch_group, window] = c
 
-            # Add BAD_SCI annotation to channels with SCI below threshold
+            # Add BAD_SCI annotation to channels if below threshold
             if (threshold is not None) & (c < threshold):
                 raw.annotations.append(
                     t_start,
