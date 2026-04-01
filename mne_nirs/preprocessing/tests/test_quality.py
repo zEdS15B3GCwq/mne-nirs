@@ -19,7 +19,6 @@ def fixture_fnirs_motor_data() -> mne.io.BaseRaw:
     fnirs_raw_dir = fnirs_data_folder / "Participant-1"
     raw = mne.io.read_raw_nirx(str(fnirs_raw_dir), verbose=True).load_data()
     return mne.preprocessing.nirs.optical_density(raw)
-    # return raw
 
 
 @pytest.fixture(name="fnirs_labnirs_3wl_data")
@@ -33,8 +32,19 @@ def fixture_fnirs_labnirs_3wl_data() -> mne.io.BaseRaw:
         / "labnirs_3wl_raw_recording.snirf"
     )
     raw = mne.io.read_raw_snirf(fname_labnirs_3wl)
+    ch_names = [
+        "S2_D2 780",
+        "S2_D2 805",
+        "S2_D2 830",
+        "S1_D2 780",
+        "S1_D2 805",
+        "S1_D2 830",
+        "S1_D1 780",
+        "S1_D1 805",
+        "S1_D1 830",
+    ]
+    assert_array_equal(raw.ch_names[:9], ch_names)
     return mne.preprocessing.nirs.optical_density(raw)
-    # return raw
 
 
 def find_annotations(
@@ -44,8 +54,28 @@ def find_annotations(
     channel_names: list[str],
     window_time: float,
 ) -> np.ndarray:
-    # marks is a matrix of whether a bad mark has been found for a channel/window
-    # row: channel, column: window
+    """Return a matrix of whether expected annotations are found in the expected places.
+
+    Parameters
+    ----------
+    raw : instance of Raw
+        The Raw data, annotated (e.g. with BAD_SCI or BAD_PeakPower annotations)
+    description : str
+        The description of the annotation to look for (e.g. "BAD_SCI").
+    windows : list of int
+        The window numbers (starting from 0) to look for annotations in.
+    channel_names : list of str
+        The channel names to look for annotations in.
+    window_time : float
+        The duration of the window in seconds (e.g. 10), used to calculate the
+        expected annotation onset times.
+
+    Returns
+    -------
+    marks : array (n_channels, n_windows)
+        A boolean array where True indicates that an annotation with the specified
+        description was found for the corresponding channel and window.
+    """
     marks = np.zeros((len(channel_names), len(windows)), dtype=bool)
 
     for ann in raw.annotations:
@@ -65,7 +95,6 @@ def find_annotations(
             if ann_name in channel_names:
                 marks[channel_names.index(ann_name), col] = True
 
-    print(marks)
     return marks
 
 
@@ -114,8 +143,8 @@ def test_sci_windowed_known_values(fnirs_motor_data: mne.io.BaseRaw):
     this test will need to be updated as well.
     """
     raw = fnirs_motor_data.copy()
-    sfreq = raw.info["sfreq"]
 
+    sfreq = raw.info["sfreq"]
     time_window = 30
     num_channels = 6
     windowA = 5
@@ -368,18 +397,6 @@ def test_peak_power_known_values_multi_wavelength(
     - Group 3 (ch 6-8): group 2 with different order (same PP)
     """
     raw = fnirs_labnirs_3wl_data.copy().load_data()
-    ch_names = [
-        "S2_D2 780",
-        "S2_D2 805",
-        "S2_D2 830",
-        "S1_D2 780",
-        "S1_D2 805",
-        "S1_D2 830",
-        "S1_D1 780",
-        "S1_D1 805",
-        "S1_D1 830",
-    ]
-    assert_array_equal(raw.ch_names[:9], ch_names)
 
     sfreq = raw.info["sfreq"]
     time_window = 4
@@ -436,13 +453,11 @@ def test_peak_power_known_values_multi_wavelength(
         raw,
         "BAD_PeakPower",
         [1],
-        raw.ch_names[3:9],
+        raw.ch_names[:num_channels],
         time_window,
     )
 
-    print(marks)
-    assert False
-    expected = np.array([False, False] * 6 + [True, True] * 2)
+    expected = np.array([False] * 3 + [True] * 6)
     assert_array_equal(marks.ravel(), expected)
 
 
@@ -485,7 +500,9 @@ def test_sci_windowed_annotations_target_correct_channels() -> None:
         ann for ann in raw_out.annotations if ann["description"] == "BAD_SCI"
     ]
     bad_channels = {ann["ch_names"] for ann in bad_annotations}
-    assert bad_channels == {("S2_D1 760", "S2_D1 850")}
+    assert bad_channels == {("S2_D1 760", "S2_D1 850")}, (
+        "BAD_SCI annotations were assigned to the wrong channels."
+    )
 
 
 def test_pp_windowed_annotations_target_correct_channels() -> None:
@@ -530,4 +547,6 @@ def test_pp_windowed_annotations_target_correct_channels() -> None:
         ann for ann in raw_out.annotations if ann["description"] == "BAD_PeakPower"
     ]
     bad_channels = {ann["ch_names"] for ann in bad_annotations}
-    assert bad_channels == {("S2_D1 760", "S2_D1 850")}
+    assert bad_channels == {("S2_D1 760", "S2_D1 850")}, (
+        "BAD_PeakPower annotations were assigned to the wrong channels."
+    )
