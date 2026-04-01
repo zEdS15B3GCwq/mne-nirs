@@ -63,12 +63,21 @@ def peak_power(
            quality assessment of fNIRS scans." Optics and the Brain.
            Optical Society of America, 2020.
     """
+    # Copy raw to avoid modifying original and load data into memory
     raw = raw.copy().load_data()
+
+    # Validate raw object, but note that raw type is not verified here
     _validate_type(raw, BaseRaw, "raw")
 
+    # `picks` returns a list of channels ordered alphanumerically and grouped by
+    # channel groups (i.e. same source-detector pair). The order of channels in
+    # `picks` can be differ from the order of channels in `raw`.
     picks = _validate_nirs_info(raw.info)
+
+    # Number of wavelengths based on channel names
     n_wavelengths = len(np.unique(_channel_frequencies(raw.info)))
 
+    # Bandpass filter data to focus on cardiac pulsation frequencies
     filtered_data = filter_data(
         raw._data,
         raw.info["sfreq"],
@@ -80,16 +89,15 @@ def peak_power(
         h_trans_bandwidth=h_trans_bandwidth,
     )
 
-    window_samples = int(np.ceil(time_window * raw.info["sfreq"]))
-    n_windows = int(np.floor(len(raw) / window_samples))
+    samples_per_window = int(np.ceil(time_window * raw.info["sfreq"]))
+    n_windows = int(np.floor(len(raw) / samples_per_window))
 
     scores = np.zeros((len(picks), n_windows))
     times = []
 
     for window in range(n_windows):
-        start_sample = int(window * window_samples)
-        end_sample = start_sample + window_samples
-        end_sample = np.min([end_sample, len(raw) - 1])
+        start_sample = int(window * samples_per_window)
+        end_sample = min(start_sample + samples_per_window, len(raw) - 1)
 
         t_start = raw.times[start_sample]
         t_stop = raw.times[end_sample]
@@ -105,12 +113,15 @@ def peak_power(
             peak_powers = []
             for ii, jj in zip(*pair_indices):
                 c = np.correlate(group_data[ii], group_data[jj], "full")
-                c = c / window_samples
+                c = c / samples_per_window
                 [_, pxx] = periodogram(c, fs=raw.info["sfreq"], window="hamming")
                 peak_powers.append(max(pxx))
+
+            # Take the minimum peak power across pairs
             pp = min(peak_powers) if peak_powers else 0.0
             scores[ch_group, window] = pp
 
+            # Annotate group channels in this window if below threshold
             if (threshold is not None) & (pp < threshold):
                 raw.annotations.append(
                     t_start,
