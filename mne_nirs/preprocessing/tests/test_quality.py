@@ -367,17 +367,28 @@ def test_peak_power_known_values_multi_wavelength(
     - Group 2 (ch 3-5): signal + noisy signal + noise (smallest wins, PP≈0)
     - Group 3 (ch 6-8): group 2 with different order (same PP)
     """
-    raw = fnirs_labnirs_3wl_data.copy()
-    sfreq = raw.info["sfreq"]
+    raw = fnirs_labnirs_3wl_data.copy().load_data()
+    ch_names = [
+        "S2_D2 780",
+        "S2_D2 805",
+        "S2_D2 830",
+        "S1_D2 780",
+        "S1_D2 805",
+        "S1_D2 830",
+        "S1_D1 780",
+        "S1_D1 805",
+        "S1_D1 830",
+    ]
+    assert_array_equal(raw.ch_names[:9], ch_names)
 
+    sfreq = raw.info["sfreq"]
     time_window = 4
     num_channels = 9
-
     rng = np.random.default_rng(seed=123456)
     t = np.arange(raw.n_times) / sfreq
-    signal = np.sin(2 * np.pi * 1.0 * t) - 0.5  # base "heartbeat", 1 Hz
-    noheart = (
-        np.sin(2 * np.pi * 0.1 * t) + np.sin(2 * np.pi * 3 * t) - 0.5
+    signal = np.sin(2 * np.pi * 1.0 * t)  # base "heartbeat", 1 Hz
+    noheart = np.sin(2 * np.pi * 0.1 * t) + np.sin(
+        2 * np.pi * 3 * t
     )  # 0.1 Hz + 3 Hz, not in the 0.5-2.5 Hz PP band
     noisy = signal + rng.normal(size=(raw.n_times,)) * 2
 
@@ -387,16 +398,19 @@ def test_peak_power_known_values_multi_wavelength(
     # copy() would be needed.
     raw._data[0:num_channels] = signal[np.newaxis, :]
 
-    # Group 1 (ch 0, 1, 2): all perfectly correlated, no need to change
+    # Group 1 (S2-D2): all perfectly correlated, no need to change
 
-    # Group 2 (ch 3, 4, 5):
+    # Group 2 (S1-D2):
     # base signal, noisy signal, no heart signal, should have very low PP
-    raw._data[4] = noisy
-    raw._data[5] = noheart
+    raw._data[4] = noisy.copy()
+    raw._data[5] = noheart.copy()
 
-    # Group 3 (ch 6, 7, 8): group 2 reordered, should have the same PP
-    raw._data[6] = noheart
-    raw._data[8] = noisy
+    # Group 3 (S1-D1): group 2 reordered, should have same-ish PP
+    # It won't be exactly the same value as the result of the correlation
+    # will be reversed if the compared channels are reversed, which results
+    # in minimally different periodograms.
+    raw._data[6] = noheart.copy()
+    raw._data[8] = noisy.copy()
 
     # calculate PP quality
     raw, scores, times_out = peak_power(raw, time_window=time_window, threshold=0.1)
@@ -407,30 +421,29 @@ def test_peak_power_known_values_multi_wavelength(
 
     # verify scores
     print(scores[:9, 1])
-    assert_allclose(scores[0:3, 1], 1.34, atol=0.05)  # group 0
-    assert_allclose(scores[3:9, 1], 0.03, atol=0.05)  # groups 2 and 3
-    assert_array_equal(
-        scores[3:6, 1], scores[6:9, 1]
-    )  # groups 2 and 3 should be the same
+    from pprint import pprint
 
+    print(raw.ch_names[:9])
+    pprint([ann for ann in raw.annotations if ann["description"] == "BAD_PeakPower"])
+    assert_allclose(scores[0:3, 1], 1.34, atol=0.01)  # group 0
+    assert_allclose(scores[3:9, 1], 0.03, atol=0.01)  # groups 2 and 3
+    assert_allclose(
+        scores[3:6, 1], scores[6:9, 1], atol=0.01
+    )  # groups 2 and 3 should be about the same
 
-#     # Group 1 PP > group 2 PP (group 2 W2 all-zero -> PP≈0)
-#     assert scores[0, 0] > scores[3, 0]
-#     assert scores[0, 2] > scores[3, 2]
-#     assert scores[3, 2] < 0.75
+    # verify that BAD_PeakPower annotations exist for groups 2 and 3 in the 2nd window
+    marks = find_annotations(
+        raw,
+        "BAD_PeakPower",
+        [1],
+        raw.ch_names[3:9],
+        time_window,
+    )
 
-#     # Group 2 W2 (all-zero) must have BAD_PeakPower covering all 3 channels
-#     # of the group
-#     group2_chs = set(raw.ch_names[3:6])
-#     group2_anns = [
-#         ann
-#         for ann in raw.annotations
-#         if ann["description"] == "BAD_PeakPower"
-#         and group2_chs.intersection(ann["ch_names"])
-#     ]
-#     assert len(group2_anns) > 0
-#     for ann in group2_anns:
-#         assert set(ann["ch_names"]) == group2_chs
+    print(marks)
+    assert False
+    expected = np.array([False, False] * 6 + [True, True] * 2)
+    assert_array_equal(marks.ravel(), expected)
 
 
 def test_sci_windowed_annotations_target_correct_channels() -> None:
@@ -470,6 +483,51 @@ def test_sci_windowed_annotations_target_correct_channels() -> None:
 
     bad_annotations = [
         ann for ann in raw_out.annotations if ann["description"] == "BAD_SCI"
+    ]
+    bad_channels = {ann["ch_names"] for ann in bad_annotations}
+    assert bad_channels == {("S2_D1 760", "S2_D1 850")}
+
+
+def test_pp_windowed_annotations_target_correct_channels() -> None:
+    """Test that BAD_PeakPower annotations are assigned to the correct channels.
+
+    _validate_nirs_info / _check_channels_ordered returns picks sorted
+    alphabetically by channel name, which can differ from the row order
+    in raw._data. This test verifies that annotations are added to the
+    correct channels regardless of the order of the channel names.
+    """
+    sfreq = 10.0
+    n_samples = 400  # 40 s at 10 Hz → 4 windows of 10 s
+
+    # Channels (both wavelengths and S-D numbers) stored in NON-alphabetical order
+    ch_names = [
+        "S2_D1 760",
+        "S1_D1 850",
+        "S1_D1 760",
+        "S2_D1 850",
+    ]
+    ch_types = ["fnirs_od"] * 4
+
+    info = mne.create_info(ch_names=ch_names, sfreq=sfreq, ch_types=ch_types)
+    for ch in info["chs"]:
+        # Wavelength must be stored in loc[9] (required by _validate_nirs_info).
+        ch["loc"][9] = float(ch["ch_name"].split(" ")[1])
+
+    t = np.arange(n_samples) / sfreq
+    signal = np.sin(2 * np.pi * 1.0 * t)  # base "heartbeat", 1 Hz
+    noheart = np.sin(2 * np.pi * 0.1 * t) + np.sin(
+        2 * np.pi * 3 * t
+    )  # 0.1 Hz + 3 Hz, not in the 0.5-2.5 Hz PP band
+
+    # S1_D1 (raw._data rows 2, 1): identical  → high PP  (GOOD, above threshold)
+    # S2_D1 (raw._data rows 0, 3): no heartbeat  → low PP  (BAD,  below threshold)
+    data = np.array([signal, signal, signal, noheart], dtype=float)
+
+    raw = mne.io.RawArray(data, info)
+    raw_out, _, _ = peak_power(raw, time_window=10, threshold=0.1)
+
+    bad_annotations = [
+        ann for ann in raw_out.annotations if ann["description"] == "BAD_PeakPower"
     ]
     bad_channels = {ann["ch_names"] for ann in bad_annotations}
     assert bad_channels == {("S2_D1 760", "S2_D1 850")}
