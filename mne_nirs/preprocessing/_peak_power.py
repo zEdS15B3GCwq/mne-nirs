@@ -54,6 +54,14 @@ def peak_power(
         List of the start and end times of each window used to compute the
         peak spectral power.
 
+    Warning
+    -------
+    This implementation of peak power differs from Pollonini's original in that
+    the original calculates peak power on raw data, whereas multiple types are
+    allowed here; and while both implementations calculate a kind of cosine
+    similarity, the mathematical details are different. Users are advised to
+    check the results and adjust parameters as needed.
+
     References
     ----------
     .. [1] Pollonini L et al., “PHOEBE: a method for real time mapping of

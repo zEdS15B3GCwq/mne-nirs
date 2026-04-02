@@ -52,6 +52,14 @@ def scalp_coupling_index_windowed(
     times : list
         List of the start and end times of each window used to compute SCI.
 
+    Warning
+    -------
+    This implementation of scalp coupling index differs from Pollonini's original in
+    that the original calculates scalp coupling index on raw data, whereas optical
+    density data is expected here; and while both implementations calculate a kind
+    of cosine similarity, the mathematical details are different. Users are advised
+    to check the results and adjust parameters as needed.
+
     References
     ----------
     .. [1] Pollonini L et al., “PHOEBE: a method for real time mapping of
