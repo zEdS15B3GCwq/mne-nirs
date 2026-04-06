@@ -98,10 +98,16 @@ def plot_3d_montage(
     from scipy.spatial.distance import cdist
 
     _validate_type(info, Info, "info")
-    _validate_type(view_map, dict, "views")
+    # _validate_type(view_map, dict, "views")
     _validate_type(src_det_names, (None, dict, str), "src_det_names")
     _validate_type(ch_names, (dict, str, None), "ch_names")
-    info = pick_info(info, pick_types(info, fnirs=True, exclude=())[::2])
+    print(info["ch_names"])
+    pt = pick_types(info, fnirs=True, exclude=())
+    print(pt)
+    info = pick_info(info, pt[::2])
+    # info = pick_info(info, pick_types(info, fnirs=True, exclude=())[::2])
+    print(info["ch_names"])
+    return
     if isinstance(ch_names, str):
         _check_option("ch_names", ch_names, ("numbered",), extra="when str")
         ch_names = {
