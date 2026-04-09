@@ -102,7 +102,11 @@ def plot_3d_montage(
     _validate_type(src_det_names, (None, dict, str), "src_det_names")
     _validate_type(ch_names, (dict, str, None), "ch_names")
     print(info["ch_names"])
-    info = pick_info(info, pick_types(info, fnirs=True, exclude=())[::2])
+    unsorted_picks = pick_types(info, fnirs=True, exclude=())
+    unsorted_ch_names = [info["ch_names"][pi] for pi in unsorted_picks]
+    sorted_picks = unsorted_picks[np.argsort(unsorted_ch_names)]
+    n_wavelengths = len(np.unique(_channel_frequencies(raw.info)))
+    info = pick_info(info, sorted_picks[::n_wavelengths])
     print(info["ch_names"])
     return
     if isinstance(ch_names, str):
