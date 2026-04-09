@@ -9,6 +9,7 @@ import numpy as np
 from mne import Info, pick_info, pick_types
 from mne.channels import make_standard_montage
 from mne.channels.montage import transform_to_head
+from mne.preprocessing.nirs import _channel_frequencies, _check_channels_ordered
 from mne.transforms import _get_trans, apply_trans
 from mne.utils import _check_option, _validate_type, logger, verbose
 from mne.viz import Brain
@@ -98,11 +99,24 @@ def plot_3d_montage(
     from scipy.spatial.distance import cdist
 
     _validate_type(info, Info, "info")
-    _validate_type(view_map, dict, "views")
+    # _validate_type(view_map, dict, "views")
     _validate_type(src_det_names, (None, dict, str), "src_det_names")
     _validate_type(ch_names, (dict, str, None), "ch_names")
+    print("---- ORIGINAL CHANNEL NAMES ----")
     print(info["ch_names"])
-    info = pick_info(info, pick_types(info, fnirs=True, exclude=())[::2])
+
+    info = pick_info(info, pick_types(info, fnirs=True, exclude=()))
+    info = pick_info(info, _check_channels_ordered(info))
+
+    unsorted_picks = pick_types(info, fnirs=True, exclude=())
+    unsorted_picked_ch_names = [info["ch_names"][pi] for pi in unsorted_picks]
+    sorted_picks = unsorted_picks[np.argsort(unsorted_picked_ch_names)]
+    n_wavelengths = len(np.unique(_channel_frequencies(raw.info)))
+    print("---- PICKS ----")
+    print(sorted_picks)
+    # info = pick_info(info, pick_types(info, fnirs=True, exclude=())[::2])
+    info = pick_info(info, sorted_picks)
+    print("---- PICKED CHANNEL NAMES ----")
     print(info["ch_names"])
     return
     if isinstance(ch_names, str):
