@@ -101,14 +101,17 @@ def plot_3d_montage(
     _validate_type(view_map, dict, "views")
     _validate_type(src_det_names, (None, dict, str), "src_det_names")
     _validate_type(ch_names, (dict, str, None), "ch_names")
-    print(info["ch_names"])
-    unsorted_picks = pick_types(info, fnirs=True, exclude=())
-    unsorted_ch_names = [info["ch_names"][pi] for pi in unsorted_picks]
-    sorted_picks = unsorted_picks[np.argsort(unsorted_ch_names)]
-    n_wavelengths = len(np.unique(_channel_frequencies(raw.info)))
-    info = pick_info(info, sorted_picks[::n_wavelengths])
-    print(info["ch_names"])
-    return
+
+    # Filter to fNIRS data, and select one channel per source-detector pair.
+    # This method should work regardless of the ordering of channels in the info,
+    # and regardless of the number of members (e.g. number of wavelengths)
+    # for each source-detector pair. Channel names must be separated from the
+    # member designator (e.g. wavelength, HbO/HbR) by a space.
+    picks = pick_types(info, fnirs=True, exclude=())
+    prefixes = [info["ch_names"][p].split()[0] for p in picks]
+    _, first_idx = np.unique(prefixes, return_index=True)
+    info = pick_info(info, picks[first_idx])
+
     if isinstance(ch_names, str):
         _check_option("ch_names", ch_names, ("numbered",), extra="when str")
         ch_names = {
