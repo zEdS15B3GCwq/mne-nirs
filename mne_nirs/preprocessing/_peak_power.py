@@ -56,7 +56,7 @@ def peak_power(
 
     Notes
     -----
-    This implementation of peak power differs from Pollonini's original[1]_[2]_,
+    This implementation of peak power differs from Pollonini's original [1]_ [2]_,
     in that the original calculates peak power on raw data, whereas multiple
     types are allowed here; and while both implementations calculate a kind of
     cosine similarity, the mathematical details are different. Users are

@@ -21,10 +21,8 @@ def fixture_fnirs_motor_data() -> mne.io.BaseRaw:
     return mne.preprocessing.nirs.optical_density(raw)
 
 
-@pytest.fixture(name="fnirs_labnirs_3wl_data")
-def fixture_fnirs_labnirs_3wl_data() -> mne.io.BaseRaw:
+def fnirs_labnirs_3wl_data() -> mne.io.BaseRaw:
     """Read and return 3-wavelength testing data."""
-    pytest.importorskip("h5py")
     fname_labnirs_3wl = (
         mne.datasets.testing.data_path(download=False)
         / "SNIRF"
@@ -43,7 +41,7 @@ def fixture_fnirs_labnirs_3wl_data() -> mne.io.BaseRaw:
         "S1_D1 805",
         "S1_D1 830",
     ]
-    assert_array_equal(raw.ch_names[:9], ch_names)
+    assert raw.ch_names[:9] == ch_names
     return mne.preprocessing.nirs.optical_density(raw)
 
 
@@ -98,14 +96,14 @@ def find_annotations(
     return marks
 
 
-@pytest.fixture(name="fnirs_datasets")
-def fixture_fnirs_datasets(
+def fnirs_datasets(
     fnirs_motor_data, fnirs_labnirs_3wl_data
 ) -> list[mne.io.BaseRaw]:
+    if not datasets.has_dataset("testing"):
+         pytest.skip("Requires testing dataset")
     return [fnirs_motor_data, fnirs_labnirs_3wl_data]
 
 
-@mne.datasets.testing.requires_testing_data
 def test_peak_power_runs(fnirs_datasets: list[mne.io.BaseRaw]) -> None:
     """Test that `peak_power` successfully runs with test data."""
     for raw in fnirs_datasets:

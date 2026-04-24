@@ -55,7 +55,7 @@ def scalp_coupling_index_windowed(
     Notes
     -----
     This implementation of scalp coupling index differs from Pollonini's
-    original[1]_[2]_, in that the original calculates scalp coupling index on raw
+    original [1]_ [2]_, in that the original calculates scalp coupling index on raw
     data, whereas optical density data is expected here; and while both
     implementations calculate a kind of cosine similarity, the mathematical
     details are different. Users are advised to check the results and adjust
