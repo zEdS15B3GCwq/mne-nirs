@@ -96,11 +96,9 @@ def find_annotations(
     return marks
 
 
-def fnirs_datasets(
-    fnirs_motor_data, fnirs_labnirs_3wl_data
-) -> list[mne.io.BaseRaw]:
+def fnirs_datasets(fnirs_motor_data, fnirs_labnirs_3wl_data) -> list[mne.io.BaseRaw]:
     if not datasets.has_dataset("testing"):
-         pytest.skip("Requires testing dataset")
+        pytest.skip("Requires testing dataset")
     return [fnirs_motor_data, fnirs_labnirs_3wl_data]
 
 
