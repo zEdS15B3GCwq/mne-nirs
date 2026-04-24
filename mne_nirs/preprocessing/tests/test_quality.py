@@ -21,8 +21,11 @@ def fixture_fnirs_motor_data() -> mne.io.BaseRaw:
     return mne.preprocessing.nirs.optical_density(raw)
 
 
-def fnirs_labnirs_3wl_data() -> mne.io.BaseRaw:
+@pytest.fixture(name="fnirs_labnirs_3wl_data")
+def fixture_fnirs_labnirs_3wl_data() -> mne.io.BaseRaw:
     """Read and return 3-wavelength testing data."""
+    if not mne.datasets.has_dataset("testing"):
+        pytest.skip("Requires testing dataset")
     fname_labnirs_3wl = (
         mne.datasets.testing.data_path(download=False)
         / "SNIRF"
@@ -96,9 +99,10 @@ def find_annotations(
     return marks
 
 
-def fnirs_datasets(fnirs_motor_data, fnirs_labnirs_3wl_data) -> list[mne.io.BaseRaw]:
-    if not datasets.has_dataset("testing"):
-        pytest.skip("Requires testing dataset")
+@pytest.fixture(name="fnirs_datasets")
+def fixture_fnirs_datasets(
+    fnirs_motor_data, fnirs_labnirs_3wl_data
+) -> list[mne.io.BaseRaw]:
     return [fnirs_motor_data, fnirs_labnirs_3wl_data]
 
 
@@ -109,7 +113,6 @@ def test_peak_power_runs(fnirs_datasets: list[mne.io.BaseRaw]) -> None:
         assert len(scores) == len(raw.ch_names)
 
 
-@mne.datasets.testing.requires_testing_data
 def test_sci_windowed_runs(fnirs_datasets: list[mne.io.BaseRaw]) -> None:
     """Test that `scalp_coupling_index_windowed` successfully runs with test data."""
     for raw in fnirs_datasets:
@@ -205,7 +208,6 @@ def test_sci_windowed_known_values(fnirs_motor_data: mne.io.BaseRaw):
     assert_array_equal(marks.ravel(), expected)
 
 
-@mne.datasets.testing.requires_testing_data
 def test_sci_windowed_known_values_multi_wavelength(
     fnirs_labnirs_3wl_data: mne.io.BaseRaw,
 ) -> None:
@@ -377,7 +379,6 @@ def test_peak_power_known_values(fnirs_motor_data: mne.io.BaseRaw) -> None:
     assert_array_equal(marks.ravel(), expected)
 
 
-@mne.datasets.testing.requires_testing_data
 def test_peak_power_known_values_multi_wavelength(
     fnirs_labnirs_3wl_data: mne.io.BaseRaw,
 ) -> None:
