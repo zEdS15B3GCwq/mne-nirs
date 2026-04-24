@@ -77,9 +77,11 @@ def scalp_coupling_index_windowed(
     _validate_type(raw, BaseRaw, "raw")
 
     # Pick optical density channels
-    # `picks` returns a list of channels ordered alphanumerically and grouped by
-    # channel groups (i.e. same source-detector pair). The order of channels in
-    # `picks` can be differ from the order of channels in `raw`.
+    # `picks` returns a list of channels ordered alphanumerically, which may differ
+    # from the order of channels in `raw`. By virtue of being sorted, channels follow
+    # an ordered sequence of S-D pairs and wavelengths, e.g., S1_D1 760, S1_D1 850,
+    # S1_D2 760, S1_D2 850, S2_D1 760, S2_D1 850, etc. The algorithm below relies on
+    # this ordering.
     picks = _validate_nirs_info(raw.info, fnirs="od", which="Scalp coupling index")
 
     # Number of wavelengths extracted from channel names
