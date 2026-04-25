@@ -99,25 +99,25 @@ def find_annotations(
     return marks
 
 
-@pytest.fixture(name="fnirs_datasets")
-def fixture_fnirs_datasets(
-    fnirs_motor_data, fnirs_labnirs_3wl_data
-) -> list[mne.io.BaseRaw]:
-    return [fnirs_motor_data, fnirs_labnirs_3wl_data]
+@pytest.fixture(
+    name="fnirs_dataset",
+    params=["fnirs_motor_data", "fnirs_labnirs_3wl_data"],
+)
+def fixture_fnirs_dataset(request) -> mne.io.BaseRaw:
+    """Each dataset becomes a separate parametrized test instance."""
+    return request.getfixturevalue(request.param)
 
 
-def test_peak_power_runs(fnirs_datasets: list[mne.io.BaseRaw]) -> None:
+def test_peak_power_runs(fnirs_dataset: mne.io.BaseRaw) -> None:
     """Test that `peak_power` successfully runs with test data."""
-    for raw in fnirs_datasets:
-        _, scores, _ = peak_power(raw.copy())
-        assert len(scores) == len(raw.ch_names)
+    _, scores, _ = peak_power(fnirs_dataset.copy())
+    assert len(scores) == len(fnirs_dataset.ch_names)
 
 
-def test_sci_windowed_runs(fnirs_datasets: list[mne.io.BaseRaw]) -> None:
+def test_sci_windowed_runs(fnirs_dataset: mne.io.BaseRaw) -> None:
     """Test that `scalp_coupling_index_windowed` successfully runs with test data."""
-    for raw in fnirs_datasets:
-        _, scores, _ = scalp_coupling_index_windowed(raw.copy())
-        assert len(scores) == len(raw.ch_names)
+    _, scores, _ = scalp_coupling_index_windowed(fnirs_dataset.copy())
+    assert len(scores) == len(fnirs_dataset.ch_names)
 
 
 def test_sci_windowed_known_values(fnirs_motor_data: mne.io.BaseRaw):
